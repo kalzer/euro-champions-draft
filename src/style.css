@@ -2632,3 +2632,265 @@ button:disabled {
     justify-content: center;
   }
 }
+
+/* FM-style match viewer MVP */
+.fmViewer {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.fmTopBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,.07);
+  border: 1px solid rgba(255,255,255,.12);
+}
+.fmTopBar span {
+  display: block;
+  font-size: 10px !important;
+  color: #8fa4c9 !important;
+}
+.fmTopBar b {
+  color: #eff8ff;
+  font-size: 13px;
+}
+.fmTopBar strong {
+  min-width: 58px;
+  text-align: center;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(79,243,211,.22), rgba(255,212,107,.2));
+  border: 1px solid rgba(255,255,255,.16);
+  color: #fff;
+  font-size: 20px;
+}
+.fmPitch {
+  position: relative;
+  height: 390px;
+  overflow: hidden;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(123,247,255,.12), transparent 32%),
+    linear-gradient(180deg, #123820 0%, #0d2c1b 48%, #123820 100%);
+  border: 1px solid rgba(140,255,209,.24);
+  box-shadow: inset 0 0 50px rgba(0,0,0,.36), 0 18px 48px rgba(0,0,0,.18);
+}
+.fmGrass {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 10%, rgba(0,0,0,.055) 10% 20%);
+  opacity: .75;
+}
+.fmHalf,
+.fmCircle,
+.fmBox,
+.fmGoal {
+  position: absolute;
+  pointer-events: none;
+  border-color: rgba(227,255,237,.42);
+}
+.fmHalf {
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid rgba(227,255,237,.42);
+}
+.fmCircle {
+  width: 96px;
+  height: 96px;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border: 1px solid rgba(227,255,237,.42);
+  border-radius: 50%;
+}
+.fmBox {
+  width: 54%;
+  height: 72px;
+  left: 23%;
+  border: 1px solid rgba(227,255,237,.42);
+}
+.fmBoxTop {
+  top: -1px;
+  border-top: 0;
+  border-radius: 0 0 18px 18px;
+}
+.fmBoxBottom {
+  bottom: -1px;
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+}
+.fmGoal {
+  width: 88px;
+  height: 10px;
+  left: 50%;
+  translate: -50% 0;
+  border: 1px solid rgba(255,255,255,.35);
+  background: rgba(255,255,255,.08);
+}
+.fmGoalTop { top: 0; border-top: 0; }
+.fmGoalBottom { bottom: 0; border-bottom: 0; }
+.fmPlayer {
+  position: absolute;
+  z-index: 3;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  translate: -50% -50%;
+  border: 1px solid rgba(255,255,255,.28);
+  box-shadow: 0 10px 24px rgba(0,0,0,.28);
+  animation: fmPlayerDrift 2.6s ease-in-out infinite alternate;
+}
+.fmPlayer b {
+  max-width: 66px;
+  position: absolute;
+  top: 41px;
+  left: 50%;
+  translate: -50% 0;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(5,11,25,.78);
+  color: #eaf6ff;
+  font-size: 9px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fmPlayer small {
+  color: rgba(255,255,255,.88) !important;
+  font-size: 10px;
+  font-weight: 1000;
+}
+.fmPlayer.own {
+  background: radial-gradient(circle at 35% 25%, #ffffff, #68ecff 18%, #3b6cff 100%);
+}
+.fmPlayer.opponent {
+  background: radial-gradient(circle at 35% 25%, #ffffff, #ffd46b 18%, #a9561d 100%);
+}
+.fmPlayer.active {
+  z-index: 5;
+  box-shadow: 0 0 0 4px rgba(255,255,255,.16), 0 0 32px rgba(123,247,255,.7);
+  animation: fmPlayerDrift 2.6s ease-in-out infinite alternate, activePulse 1s ease-in-out infinite;
+}
+.passTrace {
+  position: absolute;
+  z-index: 2;
+  height: 2px;
+  border-radius: 999px;
+  transform-origin: 0 50%;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, #ffffff, transparent);
+  filter: drop-shadow(0 0 7px rgba(255,255,255,.8));
+  animation: passTracePop 1.25s ease-in-out infinite;
+}
+.passTrace.own {
+  background: linear-gradient(90deg, transparent, #73f9ff, transparent);
+}
+.passTrace.opponent {
+  background: linear-gradient(90deg, transparent, #ffd46b, transparent);
+}
+.matchBall {
+  position: absolute;
+  z-index: 8;
+  left: var(--x1);
+  top: var(--y1);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  translate: -50% -50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #f3f4f6 42%, #111827 46%, #fff 52%, #111827 60%, #fff 74%);
+  box-shadow: 0 0 18px rgba(255,255,255,.85), 0 8px 18px rgba(0,0,0,.32);
+  animation: fmBallPath 4.3s cubic-bezier(.42,0,.16,1) infinite;
+}
+.goalFlash {
+  position: absolute;
+  z-index: 10;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  padding: 14px 22px;
+  border-radius: 999px;
+  color: #061122;
+  font-weight: 1000;
+  letter-spacing: .14em;
+  background: linear-gradient(90deg, #7bf7ff, #ffd46b);
+  box-shadow: 0 0 44px rgba(255,212,107,.65);
+  animation: goalFlashPop 4.3s ease-in-out infinite;
+}
+.goalFlash.opponent {
+  background: linear-gradient(90deg, #ff6b6b, #ffd46b);
+}
+.fmCommentary {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(0,0,0,.24);
+  border: 1px solid rgba(255,255,255,.12);
+}
+.fmCommentary span {
+  color: #7bf7ff !important;
+  font-size: 10px !important;
+}
+.fmCommentary b {
+  color: #fff;
+  font-size: 14px;
+}
+.fmCommentary small {
+  color: #9dafcf !important;
+}
+@keyframes fmBallPath {
+  0%, 8% { left: var(--x1); top: var(--y1); scale: 1; }
+  24%, 32% { left: var(--x2); top: var(--y2); scale: 1.06; }
+  48%, 56% { left: var(--x3); top: var(--y3); scale: .96; }
+  72%, 80% { left: var(--x4); top: var(--y4); scale: 1.08; }
+  96%, 100% { left: var(--x5); top: var(--y5); scale: .84; }
+}
+@keyframes fmPlayerDrift {
+  from { transform: translate(calc(var(--dx) * -.25), calc(var(--dy) * -.25)); }
+  to { transform: translate(var(--dx), var(--dy)); }
+}
+@keyframes activePulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
+@keyframes passTracePop {
+  0%, 10% { opacity: 0; }
+  18%, 42% { opacity: .8; }
+  64%, 100% { opacity: 0; }
+}
+@keyframes goalFlashPop {
+  0%, 70% { opacity: 0; scale: .72; }
+  76%, 86% { opacity: 1; scale: 1; }
+  100% { opacity: 0; scale: 1.2; }
+}
+
+@media (max-width: 680px) {
+  .fmPitch {
+    height: 340px;
+    border-radius: 20px;
+  }
+  .fmPlayer {
+    width: 31px;
+    height: 31px;
+  }
+  .fmPlayer b {
+    top: 34px;
+    max-width: 54px;
+    font-size: 8px;
+  }
+  .fmTopBar {
+    align-items: flex-start;
+  }
+  .fmTopBar strong {
+    font-size: 16px;
+    min-width: 48px;
+  }
+}

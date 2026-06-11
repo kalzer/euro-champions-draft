@@ -146,7 +146,7 @@ function App(){
   useEffect(()=>{
     if (phase !== 'simulating' || !matches.length) return;
     if (visibleMatches >= matches.length) { setPhase('result'); return; }
-    const id = setTimeout(()=>setVisibleMatches(v=>v+1), 850);
+    const id = setTimeout(()=>setVisibleMatches(v=>v+1), 4300);
     return ()=>clearTimeout(id);
   }, [phase, visibleMatches, matches]);
 
@@ -222,7 +222,7 @@ function App(){
         {phase === 'draft' && <DraftPanel mode={mode} selectedSlot={selectedSlot} spin={spin} spinMeta={spinMeta} options={options} slots={slots} assignPlayer={assignPlayer} draftedIds={draftedIds} respinsUsed={respinsUsed} respinLimit={RESPIN_LIMITS[mode] ?? 1} isSpinning={isSpinning}/>}        
         {phase === 'preseason' && <PreSeason score={score} group={group} startCampaign={startCampaign} slots={slots}/>}        
         {phase === 'draw' && <LeagueDrawPresentation matches={matches} visibleDraw={visibleDraw}/>}        
-        {phase === 'simulating' && <Simulation matches={matches} visibleMatches={visibleMatches} outcome={outcome}/>}        
+        {phase === 'simulating' && <Simulation matches={matches} visibleMatches={visibleMatches} outcome={outcome} slots={slots}/>}        
         {phase === 'result' && <Result matches={matches} outcome={finalOutcome} score={score} slots={slots}/>}        
       </div>
     </section>
@@ -496,7 +496,98 @@ function PreSeason({score,group,startCampaign,slots}){
 
 function OddsBar({label,value}){ return <div className="oddsRow"><div><span>{label}</span><b>{value}%</b></div><i><em style={{width:`${Math.min(100,value)}%`}}></em></i></div> }
 
-function Simulation({matches,visibleMatches,outcome}){
+
+const OPPONENT_SHAPE = [
+  { position:'GK', x:50, y:8 }, { position:'LB', x:86, y:28 }, { position:'CB', x:62, y:25 }, { position:'CB', x:38, y:25 }, { position:'RB', x:14, y:28 },
+  { position:'CDM', x:50, y:42 }, { position:'CM', x:68, y:52 }, { position:'CM', x:32, y:52 },
+  { position:'LW', x:82, y:76 }, { position:'ST', x:50, y:83 }, { position:'RW', x:18, y:76 }
+];
+
+function shortPlayerName(name=''){
+  const clean = String(name).replace(/\(.+?\)/g,'').trim();
+  const parts = clean.split(' ').filter(Boolean);
+  return parts.length > 1 ? parts.at(-1) : clean.slice(0,10);
+}
+
+function teamAbbr(name='OPP'){
+  const words = String(name).replace(/FC|CF|AC|CP|SC|Club/gi,'').trim().split(/\s+/).filter(Boolean);
+  return (words.length >= 2 ? words.map(w=>w[0]).join('') : String(name).slice(0,3)).slice(0,4).toUpperCase();
+}
+
+function slotBucket(position){
+  if (position === 'GK') return 'GK';
+  if (['CB','LB','RB','LWB','RWB'].includes(position)) return 'DEF';
+  if (['CDM','CM','CAM','LM','RM'].includes(position)) return 'MID';
+  return 'ATT';
+}
+
+function firstByBucket(rows, bucket, fallback=0){
+  return rows.find(r=>slotBucket(r.position)===bucket) || rows[fallback] || rows[0];
+}
+
+function buildOpponentDots(opponent){
+  const abbr = teamAbbr(opponent);
+  return OPPONENT_SHAPE.map((p,i)=>({ ...p, id:`opp-${i}`, team:'opponent', name:`${abbr} ${p.position}`, label:p.position }));
+}
+
+function buildMatchVisualFlow(match, slots){
+  const own = slots.filter(s=>s.player).map((s,i)=>({ ...s, id:`own-${s.id}`, team:'own', name:s.player.name, label:shortPlayerName(s.player.name), rating:s.player.rating }));
+  const opp = buildOpponentDots(match?.opponent || 'Opponent');
+  const userOnBall = match?.status !== 'Loss' || (match?.gf || 0) >= (match?.ga || 0);
+  const rows = userOnBall ? own : opp;
+  const start = userOnBall ? firstByBucket(rows,'DEF',1) : firstByBucket(rows,'DEF',1);
+  const middle = firstByBucket(rows,'MID',5);
+  const creator = rows.find(r=>['CAM','LW','RW','LM','RM','CM'].includes(r.position)) || middle;
+  const finisher = firstByBucket(rows,'ATT',8);
+  const target = userOnBall ? { id:'goal-top', team:'goal', name:'Goal', label:'GOAL', x:50, y:4 } : { id:'goal-bottom', team:'goal', name:'Goal', label:'GOAL', x:50, y:96 };
+  const saveTarget = userOnBall ? (opp.find(p=>p.position==='GK') || target) : (own.find(p=>p.position==='GK') || target);
+  const hasGoal = userOnBall ? (match?.gf || 0) > 0 : (match?.ga || 0) > 0;
+  const sequence = hasGoal ? [start, middle, creator, finisher, target] : [start, middle, creator, finisher, saveTarget];
+  const headline = hasGoal
+    ? (userOnBall ? `GOOOAL! ${finisher?.label || 'Your XI'} buries it.` : `${teamAbbr(match?.opponent)} scores. Defense got cooked.`)
+    : (userOnBall ? `${finisher?.label || 'Forward'} shoots — saved.` : `Huge save. Your GK keeps it alive.`);
+  return { own, opp, sequence, userOnBall, hasGoal, headline };
+}
+
+function passLineStyle(a,b,i){
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const length = Math.sqrt(dx*dx + dy*dy);
+  const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+  return { left:`${a.x}%`, top:`${a.y}%`, width:`${length}%`, transform:`rotate(${angle}deg)`, animationDelay:`${i*.48}s` };
+}
+
+function MatchVisualizer({match, slots, index}){
+  if(!match) return null;
+  const visual = buildMatchVisualFlow(match, slots || []);
+  const points = visual.sequence;
+  const vars = points.slice(0,5).reduce((acc,p,i)=>({ ...acc, [`--x${i+1}`]:`${p.x}%`, [`--y${i+1}`]:`${p.y}%` }), {});
+  const activeIds = new Set(points.map(p=>p.id));
+  const phaseText = match.status === 'Win' ? 'Your XI momentum' : match.status === 'Loss' ? `${teamAbbr(match.opponent)} pressure` : 'End-to-end chaos';
+
+  return <section className="fmViewer" key={`${match.label}-${match.opponent}-${index}`} style={vars}>
+    <div className="fmTopBar">
+      <div><span>{match.label} · {match.venue}</span><b>{phaseText}</b></div>
+      <strong>{match.gf}-{match.ga}</strong>
+    </div>
+    <div className="fmPitch">
+      <div className="fmGrass"/><div className="fmHalf"/><div className="fmCircle"/><div className="fmBox fmBoxTop"/><div className="fmBox fmBoxBottom"/><div className="fmGoal fmGoalTop"/><div className="fmGoal fmGoalBottom"/>
+      {points.slice(0,-1).map((p,i)=><i key={`trace-${i}`} className={`passTrace ${visual.userOnBall?'own':'opponent'}`} style={passLineStyle(p, points[i+1], i)}/>)}
+      {[...visual.opp, ...visual.own].map((p,i)=><div key={p.id} className={`fmPlayer ${p.team} ${activeIds.has(p.id)?'active':''}`} style={{left:`${p.x}%`, top:`${p.y}%`, '--dx':`${((i%3)-1)*5}px`, '--dy':`${(i%2?1:-1)*4}px`, animationDelay:`${i*90}ms`}}>
+        <b>{p.label}</b><small>{p.position}</small>
+      </div>)}
+      <div className="matchBall"/>
+      {visual.hasGoal && <div className={`goalFlash ${visual.userOnBall?'own':'opponent'}`}>GOAL</div>}
+    </div>
+    <div className="fmCommentary">
+      <span>Live highlight</span>
+      <b>{visual.headline}</b>
+      <small>{match.note} · final score locked by squad power simulation</small>
+    </div>
+  </section>
+}
+
+function Simulation({matches,visibleMatches,outcome,slots}){
   const current = matches[visibleMatches];
   const last = matches[Math.max(0, visibleMatches-1)];
   const leagueDone = visibleMatches >= matches.filter(m=>m.round === 'League Phase').length;
@@ -506,9 +597,9 @@ function Simulation({matches,visibleMatches,outcome}){
     {current && <div className={`liveCard matchCentre ${finalActive?'grandFinal':''}`}>
       <span>{current.label === 'Final' ? 'European Final' : current.label}</span>
       <b>Your XI vs {current.opponent}</b>
-      <small>{current.venue} · simulating 0’ → 90’</small>
+      <small>{current.venue} · FM-style highlight simulation</small>
       <div className="scoreboard"><strong>Your XI</strong><em>{current.gf ?? 0} - {current.ga ?? 0}</em><strong>{current.opponent}</strong></div>
-      <div className="minuteBar"><i/></div>
+      <MatchVisualizer match={current} slots={slots} index={visibleMatches}/>
       <LiveEvents match={current}/>
     </div>}
     {!current && last && <div className="liveCard championPulse"><span>Campaign complete</span><b>Final whistle</b><small>Preparing season review...</small></div>}
