@@ -1,5 +1,7 @@
 import { players } from '../data/players';
+import { worldCupPlayers } from '../data/worldCupPlayers';
 import { seasons } from '../data/seasons';
+import { getPlayerCountry, getPlayerConfed, getCountryMeta, nationStats, withWorldCupMeta } from '../data/worldCup';
 
 export const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 export const shuffle = (arr) => [...arr].sort(() => Math.random() - .5);
@@ -57,6 +59,94 @@ export function pickOptions({draftedIds=[], selectedSeasonId, neededSlot=null, d
   return shuffle(pool).sort((a,b)=> (neededSlot ? positionFit(b, neededSlot)-positionFit(a, neededSlot) : 0)).slice(0, Math.min(count, pool.length));
 }
 
+
+function worldCupPlayerKey(player={}){
+  return `${player.name}__${getPlayerCountry(player)}`;
+}
+
+function pickBetterWorldCupVersion(current, challenger){
+  if (!current) return challenger;
+  if ((challenger?.rating || 0) > (current?.rating || 0)) return challenger;
+  if ((challenger?.rating || 0) < (current?.rating || 0)) return current;
+  const currentYear = seasonStartYear(current?.season);
+  const challengerYear = seasonStartYear(challenger?.season);
+  return challengerYear >= currentYear ? challenger : current;
+}
+
+function dedupeWorldCupPlayers(pool=[]){
+  const bestByKey = new Map();
+  pool.forEach(player => {
+    const key = worldCupPlayerKey(player);
+    bestByKey.set(key, pickBetterWorldCupVersion(bestByKey.get(key), player));
+  });
+  return [...bestByKey.values()];
+}
+
+function worldCupPool({draftedIds=[], eraRange=[2000,2026]} = {}){
+  const draftedKeySet = new Set(
+    worldCupPlayers
+      .filter(p => draftedIds.includes(p.id))
+      .map(worldCupPlayerKey)
+  );
+
+  return dedupeWorldCupPlayers(
+    worldCupPlayers
+      .filter(p => {
+        const y = Number(p.year) || seasonStartYear(p.season);
+        return y >= eraRange[0] && y <= eraRange[1];
+      })
+      .filter(p => !draftedKeySet.has(worldCupPlayerKey(p)))
+      .map(withWorldCupMeta)
+      .filter(p => p.nationId !== 'rest_world')
+  );
+}
+
+export function getWorldCupNationStats({eraRange=[2000,2026]} = {}){
+  const pool = dedupeWorldCupPlayers(
+    worldCupPlayers.filter(p => {
+      const y = Number(p.year) || seasonStartYear(p.season);
+      return y >= eraRange[0] && y <= eraRange[1];
+    })
+  );
+  return nationStats(pool).sort((a,b)=>b.playerCount-a.playerCount || b.topRating-a.topRating);
+}
+
+export function pickWorldCupNation({draftedIds=[], eraRange=[2000,2026], needPosition=null, draftMode='balanced'} = {}){
+  const pool = worldCupPool({draftedIds, eraRange});
+  const stats = nationStats(pool).filter(n => n.id !== 'rest_world');
+  const viable = stats.filter(n => {
+    const nationPlayers = pool.filter(p => p.nationId === n.id);
+    if (!needPosition || draftMode === 'chaos') return nationPlayers.length > 0;
+    return nationPlayers.some(p => positionFit(p, needPosition) >= .88) || nationPlayers.length >= 4;
+  });
+  const picked = rand(viable.length ? viable : stats);
+  return picked || getCountryMeta('Rest of World');
+}
+
+export function pickWorldCupOptions({draftedIds=[], selectedNationId, neededSlot=null, draftMode='balanced', count=8, eraRange=[2000,2026]}){
+  let pool = worldCupPool({draftedIds, eraRange});
+  if (selectedNationId) pool = pool.filter(p => p.nationId === selectedNationId);
+  let preferred = pool;
+  if ((draftMode === 'position-first' || draftMode === 'balanced') && neededSlot) {
+    const fits = pool.filter(p => positionFit(p, neededSlot) >= .88);
+    if (fits.length) preferred = fits;
+  }
+  if (draftMode === 'strict-position' && neededSlot) {
+    const exact = pool.filter(p => p.positions.includes(neededSlot));
+    if (exact.length) preferred = exact;
+    else {
+      const fits = pool.filter(p => positionFit(p, neededSlot) >= .88);
+      if (fits.length) preferred = fits;
+    }
+  }
+  if (!preferred.length && selectedNationId) {
+    preferred = worldCupPool({draftedIds, eraRange}).filter(p => neededSlot ? positionFit(p, neededSlot) >= .88 : true);
+  }
+  if (!preferred.length) preferred = worldCupPool({draftedIds, eraRange});
+  if (draftMode === 'chaos') return shuffle(preferred).slice(0, Math.min(5, preferred.length));
+  return shuffle(preferred).sort((a,b)=> (neededSlot ? positionFit(b, neededSlot)-positionFit(a, neededSlot) : 0) || b.rating-a.rating).slice(0, Math.min(count, preferred.length));
+}
+
 function roleBucket(position) {
   if (position === 'GK') return 'GK';
   if (['CB','LB','RB','LWB','RWB'].includes(position)) return 'DEF';
@@ -64,7 +154,7 @@ function roleBucket(position) {
   return 'ATT';
 }
 
-export function calculateSquad(slots) {
+export function calculateSquad(slots, gameMode='ucl') {
   const filled = slots.filter(s => s.player);
   const totalSlots = slots.length || 11;
   if (!filled.length) return { avg:0, chemistry:0, balance:0, bigMatch:0, penalty:0, total:0, powerPct:0, chemistryPct:0, tacticalPct:0, projected:null, odds:null };
@@ -74,7 +164,11 @@ export function calculateSquad(slots) {
   const avg = adjusted.reduce((a,b)=>a+b,0)/filled.length;
   const sameSeason = countMax(filled.map(s => s.player.seasonId));
   const sameClub = countMax(filled.map(s => s.player.club));
-  const chemistry = Math.min(12, Math.max(0, (sameSeason-1)*1.9 + (sameClub-1)*.7));
+  const sameNation = countMax(filled.map(s => getPlayerCountry(s.player)));
+  const sameConfed = countMax(filled.map(s => getPlayerConfed(s.player)));
+  const chemistry = gameMode === 'worldcup'
+    ? Math.min(12, Math.max(0, (sameNation-1)*1.75 + Math.max(0, sameConfed-2)*.45))
+    : Math.min(12, Math.max(0, (sameSeason-1)*1.9 + (sameClub-1)*.7));
 
   const targets = slots.reduce((acc, s) => {
     const bucket = roleBucket(s.position);
@@ -107,7 +201,7 @@ export function calculateSquad(slots) {
   const powerPct = round1(clamp((total / 112) * 100, 0, 100));
   const chemistryPct = round1(clamp((chemistry / 12) * 100, 0, 100));
 
-  return { avg:Math.round(avg*10)/10, chemistry:Math.round(chemistry*10)/10, balance, bigMatch:Math.round(bigMatch*10)/10, penalty, total, powerPct, chemistryPct, tacticalPct, projected: projectFinish(total), odds: odds(total) };
+  return { avg:Math.round(avg*10)/10, chemistry:Math.round(chemistry*10)/10, balance, bigMatch:Math.round(bigMatch*10)/10, penalty, total, powerPct, chemistryPct, tacticalPct, projected: projectFinish(total, gameMode), odds: odds(total) };
 }
 
 function countMax(arr) {
@@ -115,11 +209,20 @@ function countMax(arr) {
   return Math.max(...Object.values(map), 0);
 }
 
-export function projectFinish(score) {
+export function projectFinish(score, gameMode='ucl') {
   const s = Math.max(68, Math.min(112, score));
   const expectedPoints = Math.round(7 + (s - 76) * .36);
-  let finish = 'League phase exit';
-  let rank = 31;
+  let finish = gameMode === 'worldcup' ? 'Group stage risk' : 'League phase exit';
+  let rank = gameMode === 'worldcup' ? 4 : 31;
+  if (gameMode === 'worldcup') {
+    if (s >= 104) { finish = 'World champion favorite'; rank = 1; }
+    else if (s >= 99) { finish = 'Final contender'; rank = 2; }
+    else if (s >= 94) { finish = 'Semi-final level'; rank = 4; }
+    else if (s >= 89) { finish = 'QF/R16 level'; rank = 8; }
+    else if (s >= 84) { finish = 'R32/R16 level'; rank = 16; }
+    else if (s >= 79) { finish = 'Best third / R32 bubble'; rank = 24; }
+    return { finish, rank, expectedPoints: Math.max(0, Math.min(9, Math.round(3 + (s - 78) * .13))) };
+  }
   if (s >= 104) { finish = 'Champion favorite'; rank = 1; }
   else if (s >= 99) { finish = 'Final / Champion contender'; rank = 3; }
   else if (s >= 94) { finish = 'Semi-final level'; rank = 6; }
@@ -162,6 +265,35 @@ const BOSS_TEAMS = [
   { name:'Liverpool 2018/19', power:98, pot:1, bossAura:'Anfield intensity' }
 ];
 
+const WORLD_CUP_POT_BASE = [
+  { pot:1, level:'World elite', teams:[
+    ['Brazil 2002',99], ['Argentina 2022',98], ['France 2018',98], ['Spain 2010',97], ['Germany 2014',96], ['Italy 2006',95], ['Netherlands 2010',93], ['Portugal 2016',92]
+  ]},
+  { pot:2, level:'Heavy nation', teams:[
+    ['Croatia 2018',91], ['England 2022',90], ['Uruguay 2010',89], ['Belgium 2018',89], ['Colombia 2014',88], ['Morocco 2022',88], ['Chile 2014',87], ['Mexico 2014',86]
+  ]},
+  { pot:3, level:'Dangerous nation', teams:[
+    ['Japan 2022',84], ['Senegal 2002',83], ['Switzerland 2018',83], ['USA 2010',82], ['South Korea 2002',82], ['Denmark 2020',82], ['Ghana 2010',81], ['Nigeria 1998',81]
+  ]},
+  { pot:4, level:'Banana skin', teams:[
+    ['Costa Rica 2014',80], ['Australia 2022',78], ['Wales 2016',78], ['Cameroon 1990',77], ['Iceland 2018',76], ['Saudi Arabia 2022',75], ['Qatar 2022',72], ['New Zealand 2010',72]
+  ]}
+];
+
+const WORLD_CUP_BOSS_TEAMS = [
+  { name:'Brazil 2002', power:102, pot:1, bossAura:'Joga Bonito final boss' },
+  { name:'Argentina 2022', power:101, pot:1, bossAura:'Messi destiny aura' },
+  { name:'France 2018', power:100, pot:1, bossAura:'Mbappe transition hell' },
+  { name:'Spain 2010', power:100, pot:1, bossAura:'Tiki-taka chokehold' },
+  { name:'Germany 2014', power:99, pot:1, bossAura:'Tournament machine' }
+];
+
+function tournamentPools(gameMode='ucl'){
+  return gameMode === 'worldcup'
+    ? { pots:WORLD_CUP_POT_BASE, bosses:WORLD_CUP_BOSS_TEAMS, userName:'Your World XI' }
+    : { pots:POT_BASE, bosses:BOSS_TEAMS, userName:'Your Draft XI' };
+}
+
 const DIFFICULTY_CONFIG = {
   casual: { label:'Casual', powerShift:-5, koBonus:4, chaos:-1.5 },
   balanced: { label:'Balanced', powerShift:0, koBonus:0, chaos:0 },
@@ -180,18 +312,18 @@ function dangerFromPower(power){
   return 'Banana skin';
 }
 
-function allPotTeams(){
-  return POT_BASE.flatMap(p => p.teams.map(([name,power]) => ({ name, power, pot:p.pot, level:p.level })));
+function allPotTeams(gameMode='ucl'){
+  return tournamentPools(gameMode).pots.flatMap(p => p.teams.map(([name,power]) => ({ name, power, pot:p.pot, level:p.level })));
 }
 
-export function drawGroup(score){
-  return drawLeaguePhaseOpponents(score);
+export function drawGroup(score, gameMode='ucl'){
+  return gameMode === 'worldcup' ? drawWorldCupGroupOpponents(score) : drawLeaguePhaseOpponents(score, gameMode);
 }
 
-export function drawLeaguePhaseOpponents(score){
+export function drawLeaguePhaseOpponents(score, gameMode='ucl'){
   const used = new Set();
   const picked = [];
-  POT_BASE.forEach(pot => {
+  tournamentPools(gameMode).pots.forEach(pot => {
     const two = shuffle(pot.teams).slice(0,2);
     two.forEach(([name,power], i) => {
       used.add(name);
@@ -201,6 +333,23 @@ export function drawLeaguePhaseOpponents(score){
   const homes = picked.filter(p=>p.venue==='Home').length;
   const aways = picked.filter(p=>p.venue==='Away').length;
   return shuffle(picked).map((o,i)=>({ ...o, label:`MD${i+1}`, venue:o.venue || (i % 2 === 0 ? 'Home' : 'Away'), usedCount:used.size, homes, aways }));
+}
+
+
+function drawWorldCupGroupOpponents(score){
+  const pots = tournamentPools('worldcup').pots;
+  const picks = [
+    rand(pots[1].teams.map(([name,power])=>({name,power,pot:2,level:pots[1].level}))),
+    rand(pots[2].teams.map(([name,power])=>({name,power,pot:3,level:pots[2].level}))),
+    rand(pots[3].teams.map(([name,power])=>({name,power,pot:4,level:pots[3].level})))
+  ];
+  return picks.map((t, idx)=>({
+    ...t,
+    label:`GS${idx+1}`,
+    venue:'Neutral',
+    danger:dangerFromPower(t.power),
+    opponentPower:t.power
+  }));
 }
 
 function matchResult(score, opponentPower=85, label='', venue='Home', difficulty='balanced'){
@@ -242,16 +391,17 @@ function simulateNeutralFixture(teamA, teamB){
   addTableMatch(teamB, b, a);
 }
 
-function buildLeagueTable(score, opponents, leagueMatches, difficulty='balanced'){
+function buildLeagueTable(score, opponents, leagueMatches, difficulty='balanced', gameMode='ucl'){
   const opponentNames = new Set(opponents.map(o=>o.name));
-  const filler = shuffle(allPotTeams().filter(t=>!opponentNames.has(t.name))).slice(0, 27);
-  const rows = [makeTableRow('Your Draft XI', score, true)];
+  const pools = tournamentPools(gameMode);
+  const filler = shuffle(allPotTeams(gameMode).filter(t=>!opponentNames.has(t.name))).slice(0, 27);
+  const rows = [makeTableRow(pools.userName, score, true)];
   const cfg = difficultyConfig(difficulty);
   opponents.forEach(o=>rows.push(makeTableRow(o.name, o.power + cfg.powerShift, false)));
   filler.forEach(t=>rows.push(makeTableRow(t.name, t.power, false)));
   const byName = Object.fromEntries(rows.map(r=>[r.name,r]));
   leagueMatches.forEach(m=>{
-    addTableMatch(byName['Your Draft XI'], m.gf, m.ga);
+    addTableMatch(byName[pools.userName], m.gf, m.ga);
     addTableMatch(byName[m.opponent], m.ga, m.gf);
   });
   // Fill every other team to 8 played with quick neutral fixtures.
@@ -277,13 +427,13 @@ function knockoutChance(score, opponentPower, bonus=0){
   return clamp(.5 + (score - opponentPower + bonus)/32, .18, .88);
 }
 
-function buildKnockoutMatches(score, leagueRank, difficulty='balanced'){
+function buildKnockoutMatches(score, leagueRank, difficulty='balanced', gameMode='ucl'){
   const matches = [];
   const cfg = difficultyConfig(difficulty);
   let alive = true;
   if (leagueRank > 24) return matches;
   if (leagueRank > 8) {
-    const opp = rand(allPotTeams().filter(t=>t.power>=80 && t.power<=90));
+    const opp = rand(allPotTeams(gameMode).filter(t=>t.power>=80 && t.power<=90));
     const adjustedPower = opp.power + cfg.powerShift;
     const win = Math.random() < knockoutChance(score, adjustedPower, (leagueRank<=16 ? 3 : -1) + cfg.koBonus);
     const r = matchResult(score, opp.power, 'Play-off', 'Two legs', difficulty);
@@ -298,8 +448,9 @@ function buildKnockoutMatches(score, leagueRank, difficulty='balanced'){
   ];
   for (const round of rounds) {
     if (!alive) break;
-    const candidates = allPotTeams().filter(t=>t.power>=round.pool[0] && t.power<=round.pool[1]);
-    const opp = round.label === 'Final' ? rand(BOSS_TEAMS) : rand(candidates.length ? candidates : allPotTeams());
+    const pools = tournamentPools(gameMode);
+    const candidates = allPotTeams(gameMode).filter(t=>t.power>=round.pool[0] && t.power<=round.pool[1]);
+    const opp = round.label === 'Final' ? rand(pools.bosses) : rand(candidates.length ? candidates : allPotTeams(gameMode));
     const venue = round.label === 'Final' ? 'Neutral' : 'Two legs';
     const adjustedPower = opp.power + cfg.powerShift + (round.label === 'Final' ? 2 : 0);
     const win = Math.random() < knockoutChance(score, adjustedPower, (leagueRank<=8 ? 3 : 0) + cfg.koBonus) - (round.label==='Final'?.04:0);
@@ -310,36 +461,104 @@ function buildKnockoutMatches(score, leagueRank, difficulty='balanced'){
   return matches;
 }
 
-export function buildMatches(score, opponents, difficulty='balanced'){
-  const leagueOpponents = opponents?.length === 8 ? opponents : drawLeaguePhaseOpponents(score);
+
+function buildWorldCupGroupTable(score, opponents, groupMatches, difficulty='balanced'){
+  const pools = tournamentPools('worldcup');
+  const rows = [makeTableRow(pools.userName, score, true)];
+  const cfg = difficultyConfig(difficulty);
+  opponents.slice(0,3).forEach(o=>rows.push(makeTableRow(o.name, o.power + cfg.powerShift, false)));
+  const byName = Object.fromEntries(rows.map(r=>[r.name,r]));
+  groupMatches.forEach(m=>{
+    addTableMatch(byName[pools.userName], m.gf, m.ga);
+    addTableMatch(byName[m.opponent], m.ga, m.gf);
+  });
+  const opponentsOnly = rows.filter(r=>!r.isUser);
+  for (let i=0;i<opponentsOnly.length;i++){
+    for (let j=i+1;j<opponentsOnly.length;j++) simulateNeutralFixture(opponentsOnly[i], opponentsOnly[j]);
+  }
+  rows.sort((a,b)=> b.points-a.points || b.gd-a.gd || b.gf-a.gf || b.power-a.power);
+  rows.forEach((r,i)=>{
+    r.rank=i+1;
+    const thirdQualified = r.rank === 3 && (r.points >= 4 || (r.points >= 3 && r.gd >= 1));
+    r.zone = r.rank <= 2 ? 'Qualified R32' : thirdQualified ? 'Best third R32' : 'Eliminated';
+  });
+  return rows;
+}
+
+function buildWorldCupKnockoutMatches(score, groupRank, qualification='', difficulty='balanced'){
+  const matches = [];
+  const cfg = difficultyConfig(difficulty);
+  let alive = groupRank <= 2 || String(qualification).includes('Best third');
+  if (!alive) return matches;
+  const rounds = [
+    { label:'R32', pool:[82,91] },
+    { label:'R16', pool:[86,94] },
+    { label:'QF', pool:[90,97] },
+    { label:'SF', pool:[92,99] },
+    { label:'Final', pool:[95,102] }
+  ];
+  for (const round of rounds) {
+    if (!alive) break;
+    const pools = tournamentPools('worldcup');
+    const candidates = allPotTeams('worldcup').filter(t=>t.power>=round.pool[0] && t.power<=round.pool[1]);
+    const opp = round.label === 'Final' ? rand(pools.bosses) : rand(candidates.length ? candidates : allPotTeams('worldcup'));
+    const adjustedPower = opp.power + cfg.powerShift + (round.label === 'Final' ? 2.5 : 0);
+    const groupBonus = groupRank === 1 ? 3 : groupRank === 2 ? 0 : -2;
+    const win = Math.random() < knockoutChance(score, adjustedPower, groupBonus + cfg.koBonus) - (round.label==='Final'?.04:0);
+    const r = matchResult(score, opp.power, round.label, 'Neutral', difficulty);
+    matches.push({ round:'Knockout', label:round.label, opponent:opp.name, venue:'Neutral', pot:opp.pot, opponentPower:adjustedPower, danger:round.label === 'Final' ? 'Final Boss' : dangerFromPower(adjustedPower), boss:round.label === 'Final', bossAura:opp.bossAura, ...r, status:win?'Win':'Loss' });
+    alive = win;
+  }
+  return matches;
+}
+
+function buildWorldCupMatches(score, opponents, difficulty='balanced'){
+  const groupOpponents = opponents?.length >= 3 ? opponents.slice(0,3) : drawWorldCupGroupOpponents(score);
+  const groupMatches = groupOpponents.map((o, idx)=>({
+    round:'Group Stage', phase:'group', label:`GS${idx+1}`, opponent:o.name, venue:'Neutral', pot:o.pot, danger:o.danger,
+    difficulty, opponentPower:o.power + difficultyConfig(difficulty).powerShift, ...matchResult(score, o.power, `GS${idx+1}`, 'Neutral', difficulty)
+  }));
+  const groupTable = buildWorldCupGroupTable(score, groupOpponents, groupMatches, difficulty);
+  const userRow = groupTable.find(r=>r.isUser);
+  const koMatches = buildWorldCupKnockoutMatches(score, userRow.rank, userRow.zone, difficulty);
+  const all = [...groupMatches, ...koMatches];
+  return all.map(m=>({ ...m, leagueTable:groupTable, groupTable, leagueRank:userRow.rank, leaguePoints:userRow.points, qualification:userRow.zone, tournamentFormat:'worldcup' }));
+}
+
+export function buildMatches(score, opponents, difficulty='balanced', gameMode='ucl'){
+  if (gameMode === 'worldcup') return buildWorldCupMatches(score, opponents, difficulty);
+  const leagueOpponents = opponents?.length === 8 ? opponents : drawLeaguePhaseOpponents(score, gameMode);
   const leagueMatches = leagueOpponents.map((o, idx)=>({
     round:'League Phase', phase:'league', label:`MD${idx+1}`, opponent:o.name, venue:o.venue, pot:o.pot, danger:o.danger, opponentPower:o.power,
     difficulty, opponentPower:o.power + difficultyConfig(difficulty).powerShift, ...matchResult(score, o.power, `MD${idx+1}`, o.venue, difficulty)
   }));
-  const leagueTable = buildLeagueTable(score, leagueOpponents, leagueMatches, difficulty);
+  const leagueTable = buildLeagueTable(score, leagueOpponents, leagueMatches, difficulty, gameMode);
   const userRow = leagueTable.find(r=>r.isUser);
-  const koMatches = buildKnockoutMatches(score, userRow.rank, difficulty);
+  const koMatches = buildKnockoutMatches(score, userRow.rank, difficulty, gameMode);
   const all = [...leagueMatches, ...koMatches];
   return all.map(m=>({ ...m, leagueTable, leagueRank:userRow.rank, leaguePoints:userRow.points, qualification:userRow.zone }));
 }
 
 export function campaignOutcome(matches, squadScore){
-  const leagueMatches = matches.filter(m=>m.phase==='league' || m.round === 'League Phase');
-  const completedLeague = leagueMatches.length >= 8;
+  const isWorldCup = matches.some(m=>m.tournamentFormat === 'worldcup' || m.phase === 'group' || m.round === 'Group Stage');
+  const leagueMatches = matches.filter(m=>m.phase==='league' || m.round === 'League Phase' || m.phase==='group' || m.round === 'Group Stage');
+  const requiredGroupGames = isWorldCup ? 3 : 8;
+  const completedLeague = leagueMatches.length >= requiredGroupGames;
   const latest = matches[matches.length-1];
-  const leagueTable = latest?.leagueTable || [];
+  const leagueTable = latest?.leagueTable || latest?.groupTable || [];
   const userRow = leagueTable.find(r=>r.isUser);
-  const leagueRank = userRow?.rank || latest?.leagueRank || 36;
+  const leagueRank = userRow?.rank || latest?.leagueRank || (isWorldCup ? 4 : 36);
   const leaguePoints = userRow?.points ?? leagueMatches.reduce((sum,m)=>sum+pointsFromStatus(m.status),0);
-  let exit = completedLeague ? 'Champion' : 'League phase running';
-  if (completedLeague && leagueRank > 24) exit = 'League phase exit';
-  if (completedLeague && leagueRank <= 24) {
-    for (const m of matches.filter(m=>m.round !== 'League Phase' && m.phase !== 'league')) {
+  let exit = completedLeague ? 'Champion' : (isWorldCup ? 'Group stage running' : 'League phase running');
+  const qualified = isWorldCup ? (leagueRank <= 2 || String(userRow?.zone || '').includes('Best third')) : leagueRank <= 24;
+  if (completedLeague && !qualified) exit = isWorldCup ? 'Group stage exit' : 'League phase exit';
+  if (completedLeague && qualified) {
+    for (const m of matches.filter(m=>m.round !== 'League Phase' && m.phase !== 'league' && m.round !== 'Group Stage' && m.phase !== 'group')) {
       if (m.status === 'Loss') { exit = `${m.label} exit`; break; }
     }
-    const koLabels = matches.filter(m=>m.round !== 'League Phase' && m.phase !== 'league').map(m=>m.label);
+    const koLabels = matches.filter(m=>m.round !== 'League Phase' && m.phase !== 'league' && m.round !== 'Group Stage' && m.phase !== 'group').map(m=>m.label);
     if (exit === 'Champion' && !koLabels.includes('Final')) {
-      exit = leagueRank <= 8 ? 'Qualified to R16' : 'Qualified to play-off';
+      exit = isWorldCup ? 'Qualified to R32' : (leagueRank <= 8 ? 'Qualified to R16' : 'Qualified to play-off');
     }
   }
   let tier = 'SS';
@@ -348,9 +567,9 @@ export function campaignOutcome(matches, squadScore){
   else if (exit.includes('Final')) tier='S';
   else if (exit.includes('SF')) tier='A';
   else if (exit.includes('QF')) tier='B';
-  else if (exit.includes('R16') || exit.includes('Play-off')) tier='C';
+  else if (exit.includes('R16') || exit.includes('R32') || exit.includes('Play-off')) tier='C';
   else tier='D';
-  return { points:leaguePoints, leaguePoints, leagueRank, leagueTable, qualification:userRow?.zone || '', exit, tier };
+  return { points:leaguePoints, leaguePoints, leagueRank, leagueTable, qualification:userRow?.zone || '', exit, tier, tournamentFormat:isWorldCup?'worldcup':'ucl' };
 }
 
 function finishRankFromOutcome(outcome){
@@ -359,6 +578,7 @@ function finishRankFromOutcome(outcome){
   if (outcome.exit.includes('SF')) return 4;
   if (outcome.exit.includes('QF')) return 8;
   if (outcome.exit.includes('R16')) return 16;
+  if (outcome.exit.includes('R32')) return 32;
   if (outcome.exit.includes('Play-off')) return 24;
   return outcome.leagueRank || 31;
 }
@@ -368,7 +588,7 @@ function ordinal(n){
   return `${n}${['th','st','nd','rd'][Math.min(n%10,4)] || 'th'}`;
 }
 
-export function summarizeSeason(matches, outcome, score){
+export function summarizeSeason(matches, outcome, score, gameMode='ucl'){
   const wins = matches.filter(m=>m.status==='Win').length;
   const draws = matches.filter(m=>m.status==='Draw').length;
   const losses = matches.filter(m=>m.status==='Loss').length;
@@ -380,9 +600,10 @@ export function summarizeSeason(matches, outcome, score){
   const projectedRank = score.projected?.rank || 20;
   const delta = projectedRank - finishedRank;
   const verdict = delta >= 3 ? 'OVERPERFORMED' : delta <= -3 ? 'UNDERPERFORMED' : 'ON PAR';
-  const q = outcome.qualification ? `League phase: ${ordinal(outcome.leagueRank)} on ${outcome.leaguePoints} pts, ${outcome.qualification}.` : '';
+  const phaseName = gameMode === 'worldcup' ? 'Group stage' : 'League phase';
+  const q = outcome.qualification ? `${phaseName}: ${ordinal(outcome.leagueRank)} on ${outcome.leaguePoints} pts, ${outcome.qualification}.` : '';
   const line = outcome.exit === 'Champion'
-    ? `Champions after finishing ${ordinal(outcome.leagueRank)} in the league phase. That XI had black air force energy.`
+    ? (gameMode === 'worldcup' ? `World champions after surviving the group and every knockout night. That XI had tournament demon energy.` : `Champions after finishing ${ordinal(outcome.leagueRank)} in the league phase. That XI had black air force energy.`)
     : `${outcome.exit}. ${q} ${losses ? 'One or two ugly nights cooked the run.' : 'Solid, but not ruthless enough.'}`;
   const note = verdict === 'UNDERPERFORMED' ? 'Great paper squad, but the simulation said “football heritage tax”.' : verdict === 'OVERPERFORMED' ? 'This team punched above the numbers. Proper chaos merchants.' : 'Pretty much what the model expected. No agenda, no robbery.';
   const biggestWin = [...matches].sort((a,b)=>((b.gf-b.ga)-(a.gf-a.ga)))[0];

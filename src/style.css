@@ -3517,3 +3517,316 @@ button:disabled {
     border-radius: 18px;
   }
 }
+
+/* Tournament mode switch / World Cup skin */
+.tournamentSwitch {
+  margin: 18px 0 24px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: linear-gradient(135deg, #ffffff0d, #ffffff06);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, .75fr);
+  gap: 18px;
+  align-items: center;
+  box-shadow: 0 18px 60px #0006;
+}
+.tournamentSwitch h2 {
+  margin: 12px 0 6px;
+  font-size: clamp(24px, 4vw, 40px);
+  letter-spacing: -.04em;
+}
+.tournamentSwitch p {
+  margin: 0;
+  color: #aebede;
+  line-height: 1.55;
+}
+.modeToggleCards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: 12px;
+}
+.modeToggleCard {
+  text-align: left;
+  color: #fff;
+  border: 1px solid #ffffff1a;
+  background: #071021b8;
+  border-radius: 22px;
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+  min-height: 122px;
+  transition: .2s ease;
+}
+.modeToggleCard svg { color: #7bf7ff; }
+.modeToggleCard b { font-size: 16px; }
+.modeToggleCard small { color: #9eb1d2; line-height: 1.4; }
+.modeToggleCard:hover { transform: translateY(-3px); border-color: #7bf7ff66; }
+.modeToggleCard.active {
+  border-color: #ffd46b;
+  background: radial-gradient(circle at 0 0, #ffd46b2b, transparent 48%), #101424;
+  box-shadow: 0 0 0 4px #ffd46b18;
+}
+.modeToggleCard.active svg { color: #ffd46b; }
+
+.theme-worldcup.shellBg {
+  background: radial-gradient(circle at 18% -8%, #ffb7033f, transparent 31%),
+    radial-gradient(circle at 86% 0%, #d0004538, transparent 29%),
+    radial-gradient(circle at 50% 112%, #16a34a2f, transparent 35%),
+    linear-gradient(180deg, #21070d 0%, #12040a 48%, #070306 100%);
+}
+.theme-worldcup .shellBg:before,
+.theme-worldcup:before {
+  opacity: .78;
+}
+.theme-worldcup .badge,
+.theme-worldcup .eyebrow {
+  color: #ffe08a;
+  border-color: #ffe08a55;
+  background: #ffe08a14;
+}
+.theme-worldcup .hero h1 {
+  background: linear-gradient(90deg, #fff7dc, #ffe08a 36%, #ff6b6b 72%, #fff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.theme-worldcup .primary {
+  background: linear-gradient(135deg, #ffe08a, #f97316 46%, #22c55e);
+  color: #25070a;
+  box-shadow: 0 18px 44px #f9731633;
+}
+.theme-worldcup .primary:hover:not(:disabled) {
+  box-shadow: 0 24px 60px #f9731648;
+}
+.theme-worldcup .brandMark > span {
+  background: linear-gradient(135deg, #ffe08a, #e11d48, #22c55e);
+  color: #25070a;
+}
+.theme-worldcup .glassNav,
+.theme-worldcup .setupBoard,
+.theme-worldcup .panel,
+.theme-worldcup .tournamentSwitch {
+  background: linear-gradient(180deg, #2a0b12d9, #0c0509dd);
+  border-color: #ffe08a24;
+}
+.theme-worldcup .choiceCard.active,
+.theme-worldcup .formationCard.active,
+.theme-worldcup .modeToggleCard.active {
+  border-color: #ffe08a;
+  background: radial-gradient(circle at 0 0, #ffe08a2b, transparent 46%), linear-gradient(180deg, #3c1115, #0d080c);
+  box-shadow: 0 0 0 4px #ffe08a1a, 0 18px 56px #0007;
+}
+.theme-worldcup .choiceCard svg,
+.theme-worldcup .tacticalIcon,
+.theme-worldcup .scoreCard > svg,
+.theme-worldcup .drawOrb,
+.theme-worldcup .choiceHead h3 svg,
+.theme-worldcup .modeToggleCard svg {
+  color: #ffe08a;
+}
+.theme-worldcup .choiceCard em,
+.theme-worldcup .tacticalBrief strong,
+.theme-worldcup .bossReveal .threatMeter b,
+.theme-worldcup .poolSeasonCard em,
+.theme-worldcup .shareCardHeader span {
+  color: #ffe08a;
+}
+.theme-worldcup .scorePill,
+.theme-worldcup .opponentBadge,
+.theme-worldcup .bossReveal .opponentBadge {
+  background: linear-gradient(135deg, #ffe08a, #f97316);
+  color: #25070a;
+}
+.theme-worldcup .mockCard.mythic {
+  background: linear-gradient(145deg, #7c1d20, #201008);
+  border-color: #ffe08a99;
+}
+.theme-worldcup .mockCard.legend {
+  background: linear-gradient(145deg, #134e2f, #1d0b12);
+  border-color: #22c55e88;
+}
+.theme-worldcup .mockCard.elite {
+  background: linear-gradient(145deg, #8a5d07, #18070b);
+  border-color: #facc1590;
+}
+.theme-worldcup .poolSeasonCard,
+.theme-worldcup .playerCard,
+.theme-worldcup .resultBox,
+.theme-worldcup .statBox,
+.theme-worldcup .award,
+.theme-worldcup .match,
+.theme-worldcup .groupTeam,
+.theme-worldcup .potCard,
+.theme-worldcup .liveCard,
+.theme-worldcup .weaknessPanel,
+.theme-worldcup .tacticalBrief,
+.theme-worldcup .premiumShare {
+  border-color: #ffe08a22;
+}
+.theme-worldcup .premiumShare {
+  background: radial-gradient(circle at 20% 0, #ffe08a26, transparent 36%),
+    radial-gradient(circle at 100% 0, #22c55e2b, transparent 38%),
+    linear-gradient(145deg, #26080d, #401119 58%, #8a5d07);
+}
+.theme-worldcup .opponentReveal.bossReveal,
+.theme-worldcup .opponentReveal.finalReveal.bossReveal {
+  border-color: #ffe08a99;
+  background: radial-gradient(circle at 0 0, #ffe08a33, transparent 42%), linear-gradient(135deg, #331016, #090407);
+  box-shadow: 0 0 70px #f9731624;
+}
+.theme-worldcup .pitch,
+.theme-worldcup .fmPitch,
+.theme-worldcup .sharePitchMini,
+.theme-worldcup .miniPitch {
+  filter: saturate(1.08) hue-rotate(-18deg);
+}
+.theme-worldcup .poolToggle:hover {
+  border-color: #ffe08a66;
+  background: #ffe08a12;
+}
+
+@media (max-width: 900px) {
+  .tournamentSwitch { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .modeToggleCards { grid-template-columns: 1fr; }
+  .tournamentSwitch { padding: 16px; border-radius: 22px; }
+}
+
+/* Champion trophy lift */
+.campaignHero.withTrophy {
+  position: relative;
+  min-height: 245px;
+  padding-right: 260px;
+  background: radial-gradient(circle at 82% 30%, #ffd46b46, transparent 34%),
+    radial-gradient(circle at 100% 0, #ffffff16, transparent 30%),
+    linear-gradient(135deg, #15100a, #070b16 58%, #2d1b05);
+}
+.campaignHero.withTrophy:before,
+.premiumShare.champion:before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 0 34%, #ffffff18 42%, transparent 50% 100%);
+  opacity: .75;
+  animation: trophyShine 2.8s ease-in-out infinite;
+}
+.championTrophyLift {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 230px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+}
+.championTrophyLift:before,
+.shareTrophyLift:before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 999px;
+  background: radial-gradient(circle, #ffd46b55, #ff8f3d22 38%, transparent 68%);
+  filter: blur(6px);
+  z-index: -1;
+}
+.championTrophyLift img {
+  max-width: 210px;
+  max-height: 200px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 28px #000a) drop-shadow(0 0 24px #ffd46b8a);
+  animation: trophyFloat 3.4s ease-in-out infinite;
+}
+.championTrophyLift span,
+.championTrophyLift small,
+.shareTrophyLift span {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid #ffd46b66;
+  background: #120b05d9;
+  color: #ffe08a;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-weight: 1000;
+  box-shadow: 0 12px 32px #0008;
+}
+.championTrophyLift span {
+  top: 6px;
+  padding: 6px 10px;
+  font-size: 10px;
+}
+.championTrophyLift small {
+  bottom: 0;
+  padding: 8px 12px;
+  font-size: 10px;
+}
+.shareCard.premiumShare.champion {
+  position: relative;
+  overflow: hidden;
+}
+.shareTrophyLift {
+  position: relative;
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  border: 1px solid #ffd46b44;
+  background: radial-gradient(circle at 50% 36%, #ffd46b35, transparent 40%),
+    linear-gradient(145deg, #1f1408, #060b16);
+  overflow: hidden;
+}
+.shareTrophyLift img {
+  max-width: min(86%, 210px);
+  max-height: 172px;
+  object-fit: contain;
+  filter: drop-shadow(0 18px 24px #000b) drop-shadow(0 0 20px #ffd46b7a);
+  animation: trophyFloat 3.4s ease-in-out infinite;
+}
+.shareTrophyLift span {
+  bottom: 12px;
+  padding: 7px 11px;
+  font-size: 10px;
+}
+.theme-worldcup .campaignHero.withTrophy {
+  background: radial-gradient(circle at 82% 30%, #ffe08a4d, transparent 34%),
+    radial-gradient(circle at 100% 0, #22c55e24, transparent 30%),
+    linear-gradient(135deg, #2a070d, #0c0509 58%, #70460a);
+}
+.theme-worldcup .shareTrophyLift {
+  border-color: #ffe08a55;
+  background: radial-gradient(circle at 50% 36%, #ffe08a42, transparent 40%),
+    linear-gradient(145deg, #310b12, #070409);
+}
+@keyframes trophyFloat {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-9px) rotate(1.2deg); }
+}
+@keyframes trophyShine {
+  0%, 68%, 100% { transform: translateX(-130%); opacity: 0; }
+  76% { opacity: .75; }
+  100% { transform: translateX(130%); }
+}
+@media (max-width: 680px) {
+  .campaignHero.withTrophy {
+    min-height: auto;
+    padding-right: 16px;
+    padding-bottom: 190px;
+  }
+  .championTrophyLift {
+    left: 50%;
+    right: auto;
+    top: auto;
+    bottom: 12px;
+    translate: -50% 0;
+    width: 210px;
+    height: 172px;
+  }
+  .championTrophyLift img {
+    max-height: 156px;
+  }
+}
