@@ -468,6 +468,156 @@ button:disabled {
   color: #8fa2c1;
   margin-top: 6px;
 }
+
+.poolSection {
+  margin-top: 26px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #10182bc9, #070b16e0);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 80px #0007;
+  border-radius: 30px;
+  overflow: hidden;
+}
+.poolCompactHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+.poolTitleBlock h2 {
+  font-size: 32px;
+  margin: 10px 0 6px;
+}
+.poolTitleBlock p {
+  margin: 0;
+  color: #9fb0cf;
+  max-width: 680px;
+  line-height: 1.55;
+}
+.poolQuickStats {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.poolQuickStats span {
+  min-width: 96px;
+  padding: 12px 14px;
+  border: 1px solid #ffffff17;
+  background: #ffffff0a;
+  border-radius: 18px;
+  color: #94a7c8;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.poolQuickStats b {
+  display: block;
+  color: #fff;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+.poolRailWrap {
+  position: relative;
+  margin-inline: -2px;
+}
+.poolRail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 4px;
+  padding: 4px 4px 14px;
+}
+.poolRail::-webkit-scrollbar {
+  height: 7px;
+}
+.poolRail::-webkit-scrollbar-track {
+  background: #ffffff0a;
+  border-radius: 999px;
+}
+.poolRail::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #64f5ff99, #ffd46b99);
+  border-radius: 999px;
+}
+.poolSeasonCard {
+  min-width: 230px;
+  flex: 0 0 230px;
+  scroll-snap-align: start;
+  padding: 16px;
+  border-radius: 22px;
+  border: 1px solid #ffffff1a;
+  background:
+    radial-gradient(circle at 85% 5%, #ffd46b24, transparent 34%),
+    linear-gradient(150deg, #151f36e6, #09101fd9);
+  box-shadow: 0 18px 48px #0007;
+  animation: pageIn 0.42s both cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.poolCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #7bf7ff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+.poolCardTop span {
+  color: #ffd46b;
+}
+.poolSeasonCard b {
+  display: block;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+  margin-bottom: 4px;
+}
+.poolSeasonCard em {
+  display: inline-flex;
+  color: #7ee7ff;
+  font-style: normal;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+.poolSeasonCard small {
+  display: block;
+  color: #98aaca;
+  line-height: 1.45;
+}
+.poolFade {
+  pointer-events: none;
+  position: absolute;
+  inset: 0 0 14px auto;
+  width: 90px;
+  background: linear-gradient(90deg, transparent, #080c17 74%);
+}
+.poolToggle {
+  border: 1px solid #ffffff1c;
+  background: #ffffff0d;
+  color: #fff;
+  border-radius: 999px;
+  padding: 11px 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+  transition: 0.2s;
+}
+.poolToggle:hover {
+  transform: translateY(-2px);
+  border-color: #7bf7ff66;
+  background: #7bf7ff12;
+}
+.poolToggle svg {
+  transition: 0.2s;
+}
+.poolToggle:hover svg {
+  transform: translateX(3px);
+}
+
 .nav {
   position: sticky;
   top: 16px;
@@ -784,6 +934,15 @@ button:disabled {
   display: block;
   font-size: 42px;
   line-height: 0.95;
+}
+.scoreCard small {
+  display: block;
+  margin-top: 5px;
+  color: #8da2c5;
+  font-size: 12px;
+}
+.scoreCard.live {
+  box-shadow: 0 0 32px rgba(112, 246, 255, 0.08);
 }
 .scoreCard p {
   grid-column: 1/-1;
@@ -2432,5 +2591,44 @@ button:disabled {
   .leagueRow span,
   .leagueRow em {
     font-size: 11px;
+  }
+}
+
+
+@media (max-width: 760px) {
+  .poolCompactHead {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+  .poolQuickStats {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .poolQuickStats span {
+    min-width: 0;
+  }
+  .poolTitleBlock h2 {
+    font-size: 26px;
+  }
+  .poolFade {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .poolSection {
+    padding: 14px;
+    border-radius: 24px;
+  }
+  .poolQuickStats {
+    grid-template-columns: 1fr;
+  }
+  .poolSeasonCard {
+    min-width: 205px;
+    flex-basis: 205px;
+  }
+  .poolToggle {
+    width: 100%;
+    justify-content: center;
   }
 }

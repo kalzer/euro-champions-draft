@@ -126,7 +126,7 @@ function App(){
 
   const selectedSlot = slots.find(s=>s.id===selectedSlotId && !s.player) || slots.find(s=>!s.player) || null;
   const draftedIds = slots.filter(s=>s.player).map(s=>s.player.id);
-  const score = useMemo(()=>calculateSquad(slots),[slots]);
+  const score = calculateSquad(slots);
   const full = slots.every(s=>s.player);
   const outcome = useMemo(()=> matches.length ? campaignOutcome(matches.slice(0, visibleMatches), score) : null, [matches, visibleMatches, score]);
   const finalOutcome = useMemo(()=> matches.length && visibleMatches >= matches.length ? campaignOutcome(matches, score) : null, [matches, visibleMatches, score]);
@@ -218,7 +218,7 @@ function App(){
       </div>
 
       <div className="panel draftPanel commandPanel">
-        <ScoreCard score={score}/>
+        <ScoreCard score={score} filledCount={draftedIds.length} totalSlots={slots.length}/>
         {phase === 'draft' && <DraftPanel mode={mode} selectedSlot={selectedSlot} spin={spin} spinMeta={spinMeta} options={options} slots={slots} assignPlayer={assignPlayer} draftedIds={draftedIds} respinsUsed={respinsUsed} respinLimit={RESPIN_LIMITS[mode] ?? 1} isSpinning={isSpinning}/>}        
         {phase === 'preseason' && <PreSeason score={score} group={group} startCampaign={startCampaign} slots={slots}/>}        
         {phase === 'draw' && <LeagueDrawPresentation matches={matches} visibleDraw={visibleDraw}/>}        
@@ -261,8 +261,47 @@ function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,era,se
     <button className="primary big startBtn" onClick={start}><Trophy/> Start Draft <ChevronRight size={18}/></button>
   </section>
 
-  <section className="squads pageEnter delay2"><div className="sectionIntro"><span className="eyebrow">Data pool</span><h2>Club-season cards</h2></div>{seasons.slice(0,28).map(s=><article key={s.id}><b>{s.club}</b><span>{s.season}</span><small>{s.theme} · {s.result}</small></article>)}</section>
+  <ClubSeasonPool seasons={seasons}/>
  </main>
+}
+
+
+function ClubSeasonPool({seasons}){
+  const [expanded,setExpanded] = useState(false);
+  const visibleSeasons = expanded ? seasons : seasons.slice(0, 12);
+  const clubCount = new Set(seasons.map(s=>s.club)).size;
+  const winnerCount = seasons.filter(s=>String(s.result).toLowerCase().includes('winner')).length;
+
+  return <section className="poolSection pageEnter delay2">
+    <div className="poolCompactHead">
+      <div className="poolTitleBlock">
+        <span className="eyebrow">Data pool</span>
+        <h2>Club-season cards</h2>
+        <p>Pool-nya sekarang dibuat ringkas. Nggak lagi numpuk panjang di depan, tinggal swipe buat intip isi data.</p>
+      </div>
+      <div className="poolQuickStats">
+        <span><b>{seasons.length}</b> seasons</span>
+        <span><b>{clubCount}</b> clubs</span>
+        <span><b>{winnerCount}</b> winners</span>
+      </div>
+    </div>
+
+    <div className="poolRailWrap">
+      <div className="poolRail" aria-label="Club-season data pool slider">
+        {visibleSeasons.map((s,i)=><article className="poolSeasonCard" key={s.id} style={{animationDelay:`${i*35}ms`}}>
+          <div className="poolCardTop"><Layers size={16}/><span>{s.result}</span></div>
+          <b>{s.club}</b>
+          <em>{s.season}</em>
+          <small>{s.theme}</small>
+        </article>)}
+      </div>
+      <div className="poolFade" aria-hidden="true"/>
+    </div>
+
+    <button className="poolToggle" type="button" onClick={()=>setExpanded(v=>!v)}>
+      {expanded ? 'Ringkas lagi' : `Lihat semua ${seasons.length} card`} <ChevronRight size={16}/>
+    </button>
+  </section>
 }
 
 function ChoiceGrid({title,items,selected,onSelect,footer}){
@@ -308,10 +347,22 @@ function DraftProgress({slots,progressPct}){
  return <div className="draftProgress"><div><span>Draft Progress</span><b>{filled}/11 Players</b></div><i><em style={{width:`${progressPct}%`}}/></i><p>{insight}</p><div className="roleChips"><span>GK {counts.GK}/1</span><span>DEF {counts.DEF}</span><span>MID {counts.MID}</span><span>ATT {counts.ATT}</span></div></div>
 }
 
-function ScoreCard({score}){
-  return <div className="scoreCard"><Sparkles/><div><span>Squad Power</span><strong>{score.total || '—'}</strong></div><p>AVG {score.avg} · Chem +{score.chemistry} · Balance {score.balance>=0?'+':''}{score.balance} · Big Match +{score.bigMatch}</p><MetricBar label="Chemistry" value={Math.min(100,score.chemistry*8.3)}/><MetricBar label="Tactical" value={score.balance>0?78:score.balance<0?30:48}/></div>
+function ScoreCard({score, filledCount=0, totalSlots=11}){
+  const hasPlayers = filledCount > 0;
+  const powerValue = hasPlayers ? score.powerPct : 0;
+  const chemistryValue = hasPlayers ? score.chemistryPct : 0;
+  const tacticalValue = hasPlayers ? score.tacticalPct : 0;
+
+  return <div className={`scoreCard ${hasPlayers ? 'live' : ''}`}>
+    <Sparkles/>
+    <div><span>Squad Power</span><strong>{hasPlayers ? score.total : '—'}</strong><small>{filledCount}/{totalSlots} players placed</small></div>
+    <p>AVG {score.avg} · Chem +{score.chemistry} · Balance {score.balance>=0?'+':''}{score.balance} · Big Match +{score.bigMatch}</p>
+    <MetricBar label="Power" value={powerValue}/>
+    <MetricBar label="Chemistry" value={chemistryValue}/>
+    <MetricBar label="Tactical" value={tacticalValue}/>
+  </div>
 }
-function MetricBar({label,value}){ return <div className="metricBar"><span>{label}</span><i><em style={{width:`${Math.max(4,Math.min(100,value))}%`}}/></i></div> }
+function MetricBar({label,value}){ return <div className="metricBar"><span>{label}</span><i><em style={{width:`${value <= 0 ? 0 : Math.max(4,Math.min(100,value))}%`}}/></i></div> }
 
 function DraftPanel({mode,selectedSlot,spin,spinMeta,options,slots,assignPlayer,draftedIds,respinsUsed,respinLimit,isSpinning}){
   const isRespin = options.length > 0 || !!spinMeta;

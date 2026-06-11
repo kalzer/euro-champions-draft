@@ -57,23 +57,57 @@ export function pickOptions({draftedIds=[], selectedSeasonId, neededSlot=null, d
   return shuffle(pool).sort((a,b)=> (neededSlot ? positionFit(b, neededSlot)-positionFit(a, neededSlot) : 0)).slice(0, Math.min(count, pool.length));
 }
 
+function roleBucket(position) {
+  if (position === 'GK') return 'GK';
+  if (['CB','LB','RB','LWB','RWB'].includes(position)) return 'DEF';
+  if (['CDM','CM','CAM','LM','RM'].includes(position)) return 'MID';
+  return 'ATT';
+}
+
 export function calculateSquad(slots) {
   const filled = slots.filter(s => s.player);
-  if (!filled.length) return { avg:0, chemistry:0, balance:0, bigMatch:0, penalty:0, total:0, projected:null, odds:null };
-  const adjusted = filled.map(s => s.player.rating * positionFit(s.player, s.position));
+  const totalSlots = slots.length || 11;
+  if (!filled.length) return { avg:0, chemistry:0, balance:0, bigMatch:0, penalty:0, total:0, powerPct:0, chemistryPct:0, tacticalPct:0, projected:null, odds:null };
+
+  const fits = filled.map(s => positionFit(s.player, s.position));
+  const adjusted = filled.map((s, idx) => s.player.rating * fits[idx]);
   const avg = adjusted.reduce((a,b)=>a+b,0)/filled.length;
   const sameSeason = countMax(filled.map(s => s.player.seasonId));
   const sameClub = countMax(filled.map(s => s.player.club));
   const chemistry = Math.min(12, Math.max(0, (sameSeason-1)*1.9 + (sameClub-1)*.7));
+
+  const targets = slots.reduce((acc, s) => {
+    const bucket = roleBucket(s.position);
+    acc[bucket] = (acc[bucket] || 0) + 1;
+    return acc;
+  }, {});
+  const filledRoles = filled.reduce((acc, s) => {
+    const bucket = roleBucket(s.position);
+    acc[bucket] = (acc[bucket] || 0) + 1;
+    return acc;
+  }, {});
+  const roleCoverage = Object.entries(targets).reduce((sum, [role, target]) => {
+    return sum + Math.min(1, (filledRoles[role] || 0) / Math.max(1, target));
+  }, 0) / Math.max(1, Object.keys(targets).length);
+  const fitAvg = fits.reduce((a,b)=>a+b,0) / filled.length;
+  const fillPct = filled.length / totalSlots;
+  const tacticalPct = round1(clamp((fitAvg * 58) + (roleCoverage * 28) + (fillPct * 14), 0, 100));
+
   const hasGK = filled.some(s=>s.position==='GK');
-  const def = filled.filter(s=>['CB','LB','RB','LWB','RWB'].includes(s.position)).length;
-  const mid = filled.filter(s=>['CDM','CM','CAM','LM','RM'].includes(s.position)).length;
-  const atk = filled.filter(s=>['LW','RW','ST'].includes(s.position)).length;
-  const balance = filled.length < 11 ? 0 : (hasGK && def>=4 && mid>=3 && atk>=2 ? 7 : hasGK && def>=3 && mid>=2 ? 3 : -5);
+  const def = filled.filter(s=>roleBucket(s.position)==='DEF').length;
+  const mid = filled.filter(s=>roleBucket(s.position)==='MID').length;
+  const atk = filled.filter(s=>roleBucket(s.position)==='ATT').length;
+  const completeBalance = hasGK && def>=4 && mid>=3 && atk>=2 ? 7 : hasGK && def>=3 && mid>=2 ? 3 : -5;
+  const liveBalance = Math.round((tacticalPct - 62) / 8);
+  const balance = filled.length < totalSlots ? clamp(liveBalance, -4, 4) : completeBalance;
+
   const bigMatch = filled.reduce((sum, s)=>sum + s.player.traits.filter(t => ['UCL Legend','Clutch','Big Game','Ballon d’Or','Captain','Mentality'].includes(t)).length, 0) * .85;
   const penalty = filled.reduce((sum, s)=>sum + (positionFit(s.player, s.position) < .88 ? 7 : 0), 0);
   const total = Math.round((avg + chemistry + balance + bigMatch - penalty) * 10) / 10;
-  return { avg:Math.round(avg*10)/10, chemistry:Math.round(chemistry*10)/10, balance, bigMatch:Math.round(bigMatch*10)/10, penalty, total, projected: projectFinish(total), odds: odds(total) };
+  const powerPct = round1(clamp((total / 112) * 100, 0, 100));
+  const chemistryPct = round1(clamp((chemistry / 12) * 100, 0, 100));
+
+  return { avg:Math.round(avg*10)/10, chemistry:Math.round(chemistry*10)/10, balance, bigMatch:Math.round(bigMatch*10)/10, penalty, total, powerPct, chemistryPct, tacticalPct, projected: projectFinish(total), odds: odds(total) };
 }
 
 function countMax(arr) {
