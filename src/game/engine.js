@@ -153,6 +153,24 @@ const POT_BASE = [
   ]}
 ];
 
+const DIFFICULTY_CONFIG = {
+  casual: { label:'Casual', powerShift:-5, koBonus:4, chaos:-1.5 },
+  balanced: { label:'Balanced', powerShift:0, koBonus:0, chaos:0 },
+  legendary: { label:'Legendary', powerShift:6, koBonus:-4, chaos:2.5 }
+};
+
+function difficultyConfig(difficulty='balanced'){
+  return DIFFICULTY_CONFIG[difficulty] || DIFFICULTY_CONFIG.balanced;
+}
+
+function dangerFromPower(power){
+  if (power >= 96) return 'Boss fight';
+  if (power >= 91) return 'Elite threat';
+  if (power >= 85) return 'Dangerous';
+  if (power >= 78) return 'Tricky';
+  return 'Banana skin';
+}
+
 function allPotTeams(){
   return POT_BASE.flatMap(p => p.teams.map(([name,power]) => ({ name, power, pot:p.pot, level:p.level })));
 }
@@ -176,10 +194,12 @@ export function drawLeaguePhaseOpponents(score){
   return shuffle(picked).map((o,i)=>({ ...o, label:`MD${i+1}`, venue:o.venue || (i % 2 === 0 ? 'Home' : 'Away'), usedCount:used.size, homes, aways }));
 }
 
-function matchResult(score, opponentPower=85, label='', venue='Home'){
+function matchResult(score, opponentPower=85, label='', venue='Home', difficulty='balanced'){
+  const cfg = difficultyConfig(difficulty);
+  const adjustedOpponent = opponentPower + cfg.powerShift;
   const venueBonus = venue === 'Home' ? 2.2 : venue === 'Away' ? -1.7 : 0;
   const pressurePenalty = ['Play-off','R16','QF','SF','Final'].some(x=>String(label).includes(x)) ? 1.4 : 0;
-  const power = score - opponentPower + 86 + venueBonus + (Math.random()*12 - 6) - pressurePenalty;
+  const power = score - adjustedOpponent + 86 + venueBonus + (Math.random()*(12 + cfg.chaos) - (6 + cfg.chaos/2)) - pressurePenalty;
   const gf = clamp(Math.round((power-74)/11 + Math.random()*2.05), 0, 6);
   const ga = clamp(Math.round((93-power)/13 + Math.random()*2.05), 0, 5);
   let status = gf > ga ? 'Win' : gf === ga ? 'Draw' : 'Loss';
@@ -213,11 +233,12 @@ function simulateNeutralFixture(teamA, teamB){
   addTableMatch(teamB, b, a);
 }
 
-function buildLeagueTable(score, opponents, leagueMatches){
+function buildLeagueTable(score, opponents, leagueMatches, difficulty='balanced'){
   const opponentNames = new Set(opponents.map(o=>o.name));
   const filler = shuffle(allPotTeams().filter(t=>!opponentNames.has(t.name))).slice(0, 27);
   const rows = [makeTableRow('Your Draft XI', score, true)];
-  opponents.forEach(o=>rows.push(makeTableRow(o.name, o.power, false)));
+  const cfg = difficultyConfig(difficulty);
+  opponents.forEach(o=>rows.push(makeTableRow(o.name, o.power + cfg.powerShift, false)));
   filler.forEach(t=>rows.push(makeTableRow(t.name, t.power, false)));
   const byName = Object.fromEntries(rows.map(r=>[r.name,r]));
   leagueMatches.forEach(m=>{
@@ -247,15 +268,17 @@ function knockoutChance(score, opponentPower, bonus=0){
   return clamp(.5 + (score - opponentPower + bonus)/32, .18, .88);
 }
 
-function buildKnockoutMatches(score, leagueRank){
+function buildKnockoutMatches(score, leagueRank, difficulty='balanced'){
   const matches = [];
+  const cfg = difficultyConfig(difficulty);
   let alive = true;
   if (leagueRank > 24) return matches;
   if (leagueRank > 8) {
     const opp = rand(allPotTeams().filter(t=>t.power>=80 && t.power<=90));
-    const win = Math.random() < knockoutChance(score, opp.power, leagueRank<=16 ? 3 : -1);
-    const r = matchResult(score, opp.power, 'Play-off', 'Two legs');
-    matches.push({ round:'Knockout play-off', label:'Play-off', opponent:opp.name, venue:'Two legs', pot:opp.pot, ...r, status:win?'Win':'Loss' });
+    const adjustedPower = opp.power + cfg.powerShift;
+    const win = Math.random() < knockoutChance(score, adjustedPower, (leagueRank<=16 ? 3 : -1) + cfg.koBonus);
+    const r = matchResult(score, opp.power, 'Play-off', 'Two legs', difficulty);
+    matches.push({ round:'Knockout play-off', label:'Play-off', opponent:opp.name, venue:'Two legs', pot:opp.pot, opponentPower:adjustedPower, danger:dangerFromPower(adjustedPower), ...r, status:win?'Win':'Loss' });
     alive = win;
   }
   const rounds = [
@@ -269,23 +292,24 @@ function buildKnockoutMatches(score, leagueRank){
     const candidates = allPotTeams().filter(t=>t.power>=round.pool[0] && t.power<=round.pool[1]);
     const opp = rand(candidates.length ? candidates : allPotTeams());
     const venue = round.label === 'Final' ? 'Neutral' : 'Two legs';
-    const win = Math.random() < knockoutChance(score, opp.power, leagueRank<=8 ? 3 : 0) - (round.label==='Final'?.04:0);
-    const r = matchResult(score, opp.power, round.label, venue);
-    matches.push({ round:'Knockout', label:round.label, opponent:opp.name, venue, pot:opp.pot, ...r, status:win?'Win':'Loss' });
+    const adjustedPower = opp.power + cfg.powerShift;
+    const win = Math.random() < knockoutChance(score, adjustedPower, (leagueRank<=8 ? 3 : 0) + cfg.koBonus) - (round.label==='Final'?.04:0);
+    const r = matchResult(score, opp.power, round.label, venue, difficulty);
+    matches.push({ round:'Knockout', label:round.label, opponent:opp.name, venue, pot:opp.pot, opponentPower:adjustedPower, danger:dangerFromPower(adjustedPower), ...r, status:win?'Win':'Loss' });
     alive = win;
   }
   return matches;
 }
 
-export function buildMatches(score, opponents){
+export function buildMatches(score, opponents, difficulty='balanced'){
   const leagueOpponents = opponents?.length === 8 ? opponents : drawLeaguePhaseOpponents(score);
   const leagueMatches = leagueOpponents.map((o, idx)=>({
     round:'League Phase', phase:'league', label:`MD${idx+1}`, opponent:o.name, venue:o.venue, pot:o.pot, danger:o.danger, opponentPower:o.power,
-    ...matchResult(score, o.power, `MD${idx+1}`, o.venue)
+    difficulty, opponentPower:o.power + difficultyConfig(difficulty).powerShift, ...matchResult(score, o.power, `MD${idx+1}`, o.venue, difficulty)
   }));
-  const leagueTable = buildLeagueTable(score, leagueOpponents, leagueMatches);
+  const leagueTable = buildLeagueTable(score, leagueOpponents, leagueMatches, difficulty);
   const userRow = leagueTable.find(r=>r.isUser);
-  const koMatches = buildKnockoutMatches(score, userRow.rank);
+  const koMatches = buildKnockoutMatches(score, userRow.rank, difficulty);
   const all = [...leagueMatches, ...koMatches];
   return all.map(m=>({ ...m, leagueTable, leagueRank:userRow.rank, leaguePoints:userRow.points, qualification:userRow.zone }));
 }

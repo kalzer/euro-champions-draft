@@ -24,6 +24,12 @@ const DRAFT_MODES = [
   { id:'chaos', name:'Pure Chaos', desc:'Random club-season dan opsi terbatas. Jangan nangis.', icon:Dice5 }
 ];
 
+const DIFFICULTIES = [
+  { id:'casual', name:'Casual', tag:'for fun', desc:'Lawan sedikit lebih manusiawi. Cocok buat ngerasain champion run dulu.', icon:ShieldCheck },
+  { id:'balanced', name:'Balanced', tag:'default', desc:'Fair fight. Squad jelek ya kebakar, squad bagus tetap bisa kena bola itu bulat.', icon:Gauge },
+  { id:'legendary', name:'Legendary', tag:'sweaty', desc:'Lawan naik power. Mode buat yang pengen mentalnya dites.', icon:Swords }
+];
+
 const yearBounds = players.reduce((acc,p)=>{
   const y = seasonStartYear(p.season); return [Math.min(acc[0],y), Math.max(acc[1],y)];
 }, [2099, 0]);
@@ -110,6 +116,7 @@ function App(){
   const [formation,setFormation]=useState('4-3-3');
   const [mode,setMode]=useState('classic');
   const [draftMode,setDraftMode]=useState('balanced');
+  const [difficulty,setDifficulty]=useState('balanced');
   const [era,setEra]=useState(yearBounds);
   const [slots,setSlots]=useState(()=>makeSlots('4-3-3'));
   const [selectedSlotId,setSelectedSlotId]=useState(null);
@@ -195,16 +202,22 @@ function App(){
   }
 
   function startCampaign(){
-    const built = buildMatches(score.total, group.length?group:drawGroup(score.total));
+    const built = buildMatches(score.total, group.length?group:drawGroup(score.total), difficulty);
     setMatches(built); setVisibleMatches(0); setVisibleDraw(0); setPhase('draw');
   }
 
-  if(!started) return <Home formation={formation} setFormation={setFormation} mode={mode} setMode={setMode} draftMode={draftMode} setDraftMode={setDraftMode} era={era} setEra={setEra} start={start}/>;
+  function skipCampaign(){
+    if (!matches.length) return;
+    setVisibleMatches(matches.length);
+    setPhase('result');
+  }
+
+  if(!started) return <Home formation={formation} setFormation={setFormation} mode={mode} setMode={setMode} draftMode={draftMode} setDraftMode={setDraftMode} difficulty={difficulty} setDifficulty={setDifficulty} era={era} setEra={setEra} start={start}/>;
 
   return <main className="app shellBg">
     <nav className="nav glassNav">
       <div className="brandMark"><span>ECD</span><div><b>European Champions Draft</b><small>36-team league phase · fan-made</small></div></div>
-      <div className="navActions"><span>{MODES.find(m=>m.id===mode)?.name} · {DRAFT_MODES.find(d=>d.id===draftMode)?.name}</span><button onClick={reset}><RotateCcw size={16}/> Reset</button></div>
+      <div className="navActions"><span>{MODES.find(m=>m.id===mode)?.name} · {DRAFT_MODES.find(d=>d.id===draftMode)?.name} · {DIFFICULTIES.find(d=>d.id===difficulty)?.name}</span><button onClick={reset}><RotateCcw size={16}/> Reset</button></div>
     </nav>
 
     <section className="gameGrid pageEnter">
@@ -220,16 +233,16 @@ function App(){
       <div className="panel draftPanel commandPanel">
         <ScoreCard score={score} filledCount={draftedIds.length} totalSlots={slots.length}/>
         {phase === 'draft' && <DraftPanel mode={mode} selectedSlot={selectedSlot} spin={spin} spinMeta={spinMeta} options={options} slots={slots} assignPlayer={assignPlayer} draftedIds={draftedIds} respinsUsed={respinsUsed} respinLimit={RESPIN_LIMITS[mode] ?? 1} isSpinning={isSpinning}/>}        
-        {phase === 'preseason' && <PreSeason score={score} group={group} startCampaign={startCampaign} slots={slots}/>}        
+        {phase === 'preseason' && <PreSeason score={score} group={group} startCampaign={startCampaign} slots={slots} difficulty={difficulty}/>}        
         {phase === 'draw' && <LeagueDrawPresentation matches={matches} visibleDraw={visibleDraw}/>}        
-        {phase === 'simulating' && <Simulation matches={matches} visibleMatches={visibleMatches} outcome={outcome} slots={slots}/>}        
-        {phase === 'result' && <Result matches={matches} outcome={finalOutcome} score={score} slots={slots}/>}        
+        {phase === 'simulating' && <Simulation matches={matches} visibleMatches={visibleMatches} outcome={outcome} slots={slots} onSkip={skipCampaign} difficulty={difficulty}/>}        
+        {phase === 'result' && <Result matches={matches} outcome={finalOutcome} score={score} slots={slots} difficulty={difficulty}/>}        
       </div>
     </section>
   </main>
 }
 
-function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,era,setEra,start}){
+function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,difficulty,setDifficulty,era,setEra,start}){
  const availableStats = useMemo(()=>{
   const seasonIds = new Set(players.filter(p=>{ const y=seasonStartYear(p.season); return y>=era[0] && y<=era[1]; }).map(p=>p.seasonId));
   return { playerCount: players.filter(p=>{ const y=seasonStartYear(p.season); return y>=era[0] && y<=era[1]; }).length, seasonCount: seasonIds.size };
@@ -256,6 +269,7 @@ function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,era,se
     <div className="setupHeader"><span className="eyebrow">Step 1 of 4</span><h2>Choose your rules</h2><p>Mode, draft logic, formasi, sama range era semuanya ngaruh ke pool pemain.</p></div>
     <ChoiceGrid title="Game Mode" items={MODES} selected={mode} onSelect={setMode} footer={`Re-spin limit: ${RESPIN_LIMITS[mode] ?? 1}`}/>
     <ChoiceGrid title="Draft Mode" items={DRAFT_MODES} selected={draftMode} onSelect={setDraftMode}/>
+    <ChoiceGrid title="Difficulty" items={DIFFICULTIES} selected={difficulty} onSelect={setDifficulty}/>
     <FormationPicker formation={formation} setFormation={setFormation}/>
     <EraSlider era={era} setEra={setEra} stats={availableStats}/>
     <button className="primary big startBtn" onClick={start}><Trophy/> Start Draft <ChevronRight size={18}/></button>
@@ -372,6 +386,7 @@ function DraftPanel({mode,selectedSlot,spin,spinMeta,options,slots,assignPlayer,
     <button className="primary fullBtn spinBtn" onClick={spin} disabled={!canSpin}>{isSpinning ? <Wand2 className="spinIcon"/> : <Shuffle/>} {isSpinning ? 'Drawing club-season...' : isRespin ? 'Re-spin draw' : 'Spin club season'}</button>
     {isSpinning && <SpinRoulette/>}
     {spinMeta && !isSpinning && <div className="spinBanner"><Dice5/><div><span>Club-season draw</span><b>{spinMeta.club} · {spinMeta.season}</b><small>{spinMeta.theme} · {spinMeta.totalLeft} players left in pool</small></div></div>}
+    {spinMeta && !isSpinning && options.length > 0 && <DraftRevealBanner options={options}/>}
     <div className="options">
       {options.length===0 && !isSpinning && <p className="muted emptyHint">Pilih slot di lapangan, klik spin, nanti keluar opsi pemain. Pemain yang udah masuk squad nggak akan muncul lagi.</p>}
       {options.map((p,i)=><PlayerCard key={p.id} player={p} mode={mode} selectedSlot={selectedSlot} slots={slots} assignPlayer={assignPlayer} draftedIds={draftedIds} index={i}/>) }
@@ -384,13 +399,20 @@ function SpinRoulette(){
  return <div className="roulette"><div>{sample.map(s=><b key={s}>{s}</b>)}</div><span>Locking the draw...</span></div>
 }
 
+function DraftRevealBanner({options}){
+ const best = [...options].sort((a,b)=>b.rating-a.rating)[0];
+ return <div className="draftRevealBanner">
+  <Sparkles size={18}/><div><span>Pack reveal animation</span><b>{options.length} cards revealed</b><small>Highest pull: {best?.name} · {best?.rating} OVR</small></div>
+ </div>
+}
+
 function PlayerCard({player, mode, selectedSlot, slots, assignPlayer, index=0}){
   const available = eligibleSlotsForPlayer(player, slots, false);
   const priority = selectedSlot && available.some(s=>s.id===selectedSlot.id) ? selectedSlot.id : available[0]?.id;
   const hideRating = mode==='expert' || mode==='scout';
   const rarity = getRarity(player.rating);
-  return <article className={`playerCard ${rarity}`} style={{animationDelay:`${index*65}ms`}}>
-    <div className="cardTop"><span>{player.club} · {player.season}</span><strong>{hideRating?'??':player.rating}</strong></div>
+  return <article className={`playerCard ${rarity} draftReveal`} style={{animationDelay:`${index*65}ms`}}>
+    <div className="cardTop"><span>{player.club} · {player.season}</span><strong>{hideRating?'??':player.rating}</strong></div><i className="revealStamp">REVEALED</i>
     <h3>{player.name}</h3>
     <p>{player.positions.join(' / ')}{selectedSlot ? ` · Fit ${Math.round(positionFit(player, selectedSlot.position)*100)}%` : ''}</p>
     <small>{player.traits.join(' · ')}</small>
@@ -451,6 +473,56 @@ function CompactLeagueTable({table}){
   </section>
 }
 
+
+function CampaignRoad({matches=[], visibleMatches=0, currentLabel=null, compact=false}){
+  const labels = getRoundOrder(matches);
+  return <section className={`campaignRoad ${compact?'compact':''}`}>
+    <div className="choiceHead"><h3><Trophy size={17}/> Road to UCL Final</h3><span>{visibleMatches}/{Math.max(1,matches.length)} played</span></div>
+    <div className="roadRail">
+      {labels.map(label=>{
+        const idx = matches.findIndex(m=>m.label===label);
+        const m = idx >= 0 ? matches[idx] : null;
+        const done = idx >= 0 && idx < visibleMatches;
+        const active = currentLabel === label;
+        const locked = idx === -1;
+        return <div key={label} className={`roadNode ${done?'done':''} ${active?'active':''} ${locked?'locked':''} ${m?.status?.toLowerCase() || ''}`}>
+          <b>{label}</b><span>{done ? m.status : active ? 'LIVE' : locked ? 'TBD' : 'Next'}</span>
+        </div>
+      })}
+    </div>
+  </section>
+}
+
+function OpponentReveal({match,difficulty}){
+  if(!match) return null;
+  const threat = Math.round(match.opponentPower || 85);
+  const diff = DIFFICULTIES.find(d=>d.id===difficulty)?.name || 'Balanced';
+  const styles = match.label === 'Final' ? 'Final night' : match.venue === 'Away' ? 'Hostile away crowd' : match.venue === 'Home' ? 'Home advantage' : 'Two-leg pressure';
+  return <section className={`opponentReveal ${match.label==='Final'?'finalReveal':''}`}>
+    <div className="opponentBadge"><Swords size={26}/><span>{teamAbbr(match.opponent)}</span></div>
+    <div className="opponentCopy"><span className="eyebrow">Opponent reveal</span><h2>Your XI vs {match.opponent}</h2><p>{match.label} · {styles} · Difficulty: {diff}</p></div>
+    <div className="threatMeter"><span>Threat Level</span><b>{threat}</b><i><em style={{width:`${Math.min(100,threat)}%`}}/></i><small>{match.danger || 'European threat'}</small></div>
+  </section>
+}
+
+function MatchRatings({match,slots}){
+  const ratings = buildMatchRatings(slots, match);
+  if(!ratings.length) return null;
+  return <section className="matchRatings">
+    <div className="choiceHead"><h3><Star size={17}/> Player rating after match</h3><span>{match.label} · {match.status} {match.scoreline}</span></div>
+    <div className="ratingRows">
+      {ratings.slice(0,6).map((r,i)=><div key={r.id} className="ratingRow"><em className={`posTag pos-${r.position}`}>{r.position}</em><b>{r.name}</b><span>{i===0?'MOTM':'Form'}</span><strong>{r.rating}</strong></div>)}
+    </div>
+  </section>
+}
+
+function AchievementGrid({achievements}){
+  if(!achievements?.length) return null;
+  return <section className="achievementBox"><span className="sectionLabel">ACHIEVEMENTS UNLOCKED</span><div className="achievementGrid">
+    {achievements.map((a,i)=><article key={`${a.title}-${i}`} className={`achievement ${a.tier}`}><Medal size={18}/><div><b>{a.title}</b><small>{a.desc}</small></div></article>)}
+  </div></section>
+}
+
 function KnockoutBracket({matches,visibleMatches}){
   const completed = matches.slice(0,visibleMatches).filter(m=>m.round !== 'League Phase');
   const allKo = matches.filter(m=>m.round !== 'League Phase');
@@ -479,7 +551,7 @@ function ShareCard({summary,outcome,score,statPack}){
   </section>
 }
 
-function PreSeason({score,group,startCampaign,slots}){
+function PreSeason({score,group,startCampaign,slots,difficulty}){
   const odds = score.odds;
   return <div className="preseason pageEnter">
     <div className="trophy">🏆</div><h2>Squad Complete</h2><p className="muted">Ini proyeksi sebelum match generate. Abis ini baru league phase jalan satu-satu.</p>
@@ -488,7 +560,8 @@ function PreSeason({score,group,startCampaign,slots}){
       <div className="project"><div><span>PROJECTED FINISH</span><b>{score.projected.finish}</b></div><div><span>EXPECTED POINTS</span><b>{score.projected.expectedPoints}</b></div></div>
       <OddsBar label="Win Europe" value={odds.win}/><OddsBar label="Reach Final" value={odds.final}/><OddsBar label="Reach Semi" value={odds.semi}/><OddsBar label="Qualify Knockout" value={odds.knockout}/><OddsBar label="Disaster Chance" value={odds.disaster}/>
     </section>
-    <section className="miniXIbox"><span className="sectionLabel">Your XI Preview</span>{slots.map(s=><span key={s.id}><b>{s.position}</b>{s.player?.name}</span>)}</section>
+    <section className="miniXIbox"><span className="sectionLabel">Your XI Preview · {DIFFICULTIES.find(d=>d.id===difficulty)?.name} difficulty</span>{slots.map(s=><span key={s.id}><b>{s.position}</b>{s.player?.name}</span>)}</section>
+    <CampaignRoad matches={[]} visibleMatches={0} compact/>
     <section className="groupBox"><h3>League Phase Draw</h3><p className="muted">8 lawan: 2 dari tiap pot, 4 home + 4 away.</p><div className="groupTeam you"><b>You</b><span>Your Draft XI</span><em>Custom Squad</em></div>{group.map((g,i)=><div key={`${g.name}-${g.label}`} className="groupTeam" style={{animationDelay:`${i*70}ms`}}><b>{g.label} · Pot {g.pot}</b><span>{g.name}</span><em>{g.venue} · {g.danger}</em></div>)}</section>
     <button className="primary fullBtn" onClick={startCampaign}><Play/> Start Campaign</button>
   </div>
@@ -512,6 +585,56 @@ function shortPlayerName(name=''){
 function teamAbbr(name='OPP'){
   const words = String(name).replace(/FC|CF|AC|CP|SC|Club/gi,'').trim().split(/\s+/).filter(Boolean);
   return (words.length >= 2 ? words.map(w=>w[0]).join('') : String(name).slice(0,3)).slice(0,4).toUpperCase();
+}
+
+
+function seededValue(seed=''){
+  let h = 2166136261;
+  for (let i=0;i<String(seed).length;i++) h = Math.imul(h ^ String(seed).charCodeAt(i), 16777619);
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+function buildMatchRatings(slots=[], match=null){
+  if(!match) return [];
+  const resultBoost = match.status === 'Win' ? .55 : match.status === 'Draw' ? .08 : -.45;
+  return slots.filter(s=>s.player).map((s)=>{
+    const p = s.player;
+    const bucket = slotBucket(s.position);
+    const seed = seededValue(`${match.label}-${match.opponent}-${p.id}`);
+    let rating = 6.05 + ((p.rating || 84) - 84) * .055 + resultBoost + (seed * .9);
+    if (bucket === 'ATT') rating += (match.gf || 0) * .18 - (match.ga || 0) * .035;
+    if (bucket === 'MID') rating += (match.gf || 0) * .10 + (match.status !== 'Loss' ? .15 : -.05);
+    if (bucket === 'DEF') rating += (match.ga === 0 ? .45 : -(match.ga || 0) * .16) + (match.status === 'Win' ? .12 : 0);
+    if (bucket === 'GK') rating += (match.ga === 0 ? .75 : -(match.ga || 0) * .2) + (seed * .25);
+    rating = Math.max(4.8, Math.min(9.8, rating));
+    return { id:p.id, name:p.name, position:s.position, club:p.club, rating:Math.round(rating*10)/10, raw:rating };
+  }).sort((a,b)=>b.raw-a.raw);
+}
+
+function getRoundOrder(matches=[]){
+  const labels = ['MD1','MD2','MD3','MD4','MD5','MD6','MD7','MD8'];
+  if (matches.some(m=>m.label==='Play-off')) labels.push('Play-off');
+  labels.push('R16','QF','SF','Final');
+  return labels;
+}
+
+
+function buildAchievements({summary,outcome,score,slots,matches,statPack,difficulty}){
+  const xi = slots.filter(s=>s.player);
+  const maxClub = Math.max(...Object.values(xi.reduce((m,s)=>(m[s.player.club]=(m[s.player.club]||0)+1,m),{})),0);
+  const maxSeason = Math.max(...Object.values(xi.reduce((m,s)=>(m[s.player.seasonId]=(m[s.player.seasonId]||0)+1,m),{})),0);
+  const achievements = [];
+  if(outcome.exit==='Champion') achievements.push({title:'Road to UCL Final', desc:'Completed the whole campaign and lifted the trophy.', tier:'gold'});
+  if(difficulty==='legendary' && !outcome.exit.includes('League phase exit')) achievements.push({title:'Legendary Survivor', desc:'Survived sweaty difficulty without getting folded early.', tier:'purple'});
+  if(summary.losses===0) achievements.push({title:'Invincible Run', desc:'Finished the campaign without a single loss.', tier:'gold'});
+  if(summary.cleanSheets>=4) achievements.push({title:'Clean Sheet King', desc:`${summary.cleanSheets} clean sheets. Backline was moving like tax collectors.`, tier:'blue'});
+  if(maxClub>=5) achievements.push({title:'Club DNA Merchant', desc:`${maxClub} players from the same club. Proper chemistry abuse.`, tier:'cyan'});
+  if(maxSeason>=4) achievements.push({title:'Same Season Sauce', desc:`${maxSeason} players from one club-season core.`, tier:'cyan'});
+  if(score.total < 86 && !outcome.exit.includes('League phase exit')) achievements.push({title:'Underdog Run', desc:'Low squad power, still made noise. Football heritage.', tier:'green'});
+  if(statPack.awards.goldenBoot.goals >= 7) achievements.push({title:'Golden Boot Demon', desc:`${statPack.awards.goldenBoot.name} dropped ${statPack.awards.goldenBoot.goals} goals.`, tier:'red'});
+  if(matches.some(m=>m.label==='Final' && m.status==='Win')) achievements.push({title:'Final Boss Cleared', desc:'Won the biggest night of the campaign.', tier:'gold'});
+  if(!achievements.length) achievements.push({title:'Campaign Logged', desc:'Completed a full European run. Not every story needs confetti.', tier:'silver'});
+  return achievements.slice(0,8);
 }
 
 function slotBucket(position){
@@ -587,13 +710,19 @@ function MatchVisualizer({match, slots, index}){
   </section>
 }
 
-function Simulation({matches,visibleMatches,outcome,slots}){
+function Simulation({matches,visibleMatches,outcome,slots,onSkip,difficulty}){
   const current = matches[visibleMatches];
   const last = matches[Math.max(0, visibleMatches-1)];
   const leagueDone = visibleMatches >= matches.filter(m=>m.round === 'League Phase').length;
   const finalActive = current?.label === 'Final';
-  return <div className={`simulation ${finalActive?'finalNight':''}`}><h2><Zap/> Match Centre</h2>
+  return <div className={`simulation ${finalActive?'finalNight':''}`}>
+    <div className="simHeader">
+      <h2><Zap/> Match Centre</h2>
+      <button type="button" className="skipCampaignBtn" onClick={onSkip}>Skip to final result</button>
+    </div>
     <div className="progress"><em style={{width:`${(visibleMatches/matches.length)*100}%`}}></em></div>
+    <CampaignRoad matches={matches} visibleMatches={visibleMatches} currentLabel={current?.label} compact/>
+    {current && <OpponentReveal match={current} difficulty={difficulty}/>}
     {current && <div className={`liveCard matchCentre ${finalActive?'grandFinal':''}`}>
       <span>{current.label === 'Final' ? 'European Final' : current.label}</span>
       <b>Your XI vs {current.opponent}</b>
@@ -603,6 +732,7 @@ function Simulation({matches,visibleMatches,outcome,slots}){
       <LiveEvents match={current}/>
     </div>}
     {!current && last && <div className="liveCard championPulse"><span>Campaign complete</span><b>Final whistle</b><small>Preparing season review...</small></div>}
+    {last && visibleMatches > 0 && <MatchRatings match={last} slots={slots}/>}
     <KnockoutBracket matches={matches} visibleMatches={visibleMatches}/>
     {leagueDone && outcome?.leagueTable && <CompactLeagueTable table={outcome.leagueTable}/>}    
     <div className="matchList">{matches.slice(0,visibleMatches).map((m,i)=><div key={`${m.label}-${i}`} className={`match ${m.status.toLowerCase()}`}><b>{m.label}</b><span>{m.opponent}</span><em>{m.status} {m.scoreline}</em><small>{m.venue} · {m.note}</small></div>)}</div>
@@ -610,11 +740,12 @@ function Simulation({matches,visibleMatches,outcome,slots}){
   </div>
 }
 
-function Result({matches,outcome,score,slots}){
+function Result({matches,outcome,score,slots,difficulty}){
  const summary = summarizeSeason(matches, outcome, score);
  const statPack = generatePlayerStats(slots, matches);
  const xi = slots.map(s=>({position:s.position, ...s.player}));
- const share = `European Champions Draft — ${outcome.exit} | League Rank ${outcome.leagueRank} | ${summary.wins}W ${summary.draws}D ${summary.losses}L | ${summary.gf} GF ${summary.ga} GA | Score ${score.total}`;
+ const achievements = buildAchievements({summary,outcome,score,slots,matches,statPack,difficulty});
+ const share = `European Champions Draft — ${outcome.exit} | Difficulty ${DIFFICULTIES.find(d=>d.id===difficulty)?.name} | League Rank ${outcome.leagueRank} | ${summary.wins}W ${summary.draws}D ${summary.losses}L | ${summary.gf} GF ${summary.ga} GA | Score ${score.total} | Achievement: ${achievements[0]?.title}`;
  return <div className={`result seasonReview pageEnter ${outcome.exit==='Champion'?'championResult':''}`}>
   <section className="campaignHero"><div><span>{outcome.exit==='Champion'?'CHAMPIONS':'CAMPAIGN COMPLETE'}</span><h2>{outcome.exit}</h2><p>{summary.line}</p></div><Crown size={54}/></section>
   <div className="resultTop">
@@ -623,7 +754,9 @@ function Result({matches,outcome,score,slots}){
     <div className={`resultBox verdict ${summary.verdict.toLowerCase().replace(' ','')}`}><b>{summary.verdict}</b><small>Tier {outcome.tier}</small></div>
   </div>
   <section className="numbersBox"><h2>Making up the numbers</h2><p>{summary.line}</p><small>{summary.note}</small></section>
+  <CampaignRoad matches={matches} visibleMatches={matches.length} compact/>
   <ShareCard summary={summary} outcome={outcome} score={score} statPack={statPack}/>
+  <AchievementGrid achievements={achievements}/>
   <div className="shareActions">
     <button className="primary fullBtn" onClick={()=>downloadSharePng({summary,outcome,score,statPack,xi})}><Download size={18}/> Download share PNG</button>
     <button className="secondary fullBtn" onClick={()=>navigator.clipboard?.writeText(share)}><Copy size={18}/> Copy share text</button>
