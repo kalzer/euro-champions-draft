@@ -3240,3 +3240,280 @@ button:disabled {
     min-width: 0;
   }
 }
+
+/* v12 tactical + weakness + boss + SFX + restart polish */
+.heroBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+.homeSoundToggle,
+.soundToggle {
+  border: 1px solid #ffffff1f;
+  background: #ffffff0e;
+  color: #eaf6ff;
+  border-radius: 999px;
+  padding: 10px 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 900;
+  transition: .2s ease;
+}
+.homeSoundToggle:hover,
+.soundToggle:hover {
+  transform: translateY(-1px);
+  border-color: #7bf7ff66;
+  background: #7bf7ff14;
+}
+.weaknessPanel,
+.tacticalBrief,
+.quickRestartBox {
+  border: 1px solid #ffffff1b;
+  background: linear-gradient(180deg, #ffffff0e, #ffffff08);
+  border-radius: 20px;
+  padding: 14px;
+  margin: 12px 0;
+  min-width: 0;
+}
+.weaknessPanel.compact {
+  padding: 12px;
+  margin: 10px 0 14px;
+}
+.weaknessHead,
+.tacticalBrief {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.weaknessHead svg {
+  color: #ffd46b;
+  flex: 0 0 auto;
+}
+.weaknessHead b,
+.tacticalBrief h3 {
+  display: block;
+  color: #fff;
+  margin: 0;
+}
+.weaknessHead small,
+.tacticalBrief p {
+  color: #9eb0d0;
+  line-height: 1.45;
+}
+.weaknessList {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.weaknessItem {
+  border: 1px solid #ffffff14;
+  background: #071021aa;
+  border-radius: 15px;
+  padding: 10px 11px;
+  display: grid;
+  gap: 4px;
+}
+.weaknessItem b {
+  color: #fff;
+  font-size: 13px;
+}
+.weaknessItem span {
+  color: #aebddd;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.weaknessItem.danger { border-color: #ff64786b; background: #ff647812; }
+.weaknessItem.warn { border-color: #ffd46b63; background: #ffd46b12; }
+.weaknessItem.info { border-color: #7bf7ff4d; background: #7bf7ff10; }
+.weaknessItem.good { border-color: #34f5b86b; background: #34f5b814; }
+.tacticalBrief {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  background: radial-gradient(circle at 0 0, #7bf7ff17, transparent 45%), #ffffff0c;
+}
+.tacticalIcon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: #7bf7ff14;
+  color: #7bf7ff;
+  border: 1px solid #7bf7ff38;
+}
+.tacticalBrief .eyebrow {
+  padding: 6px 9px;
+  font-size: 10px;
+}
+.tacticalBrief strong {
+  font-size: 28px;
+  color: #ffd46b;
+}
+.opponentReveal.bossReveal,
+.opponentReveal.finalReveal.bossReveal {
+  border-color: #ffd46b88;
+  background: radial-gradient(circle at 0 0, #ffd46b31, transparent 42%), linear-gradient(135deg, #1d1420, #070b16);
+  box-shadow: 0 0 60px #ffd46b1d;
+}
+.bossReveal .opponentBadge {
+  background: linear-gradient(135deg, #ffd46b, #ff8f3d);
+  color: #190f03;
+  box-shadow: 0 0 38px #ffd46b4a;
+}
+.bossReveal .threatMeter b {
+  color: #ffd46b;
+}
+.quickRestartBox {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  background: #ffffff09;
+}
+.premiumShare {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(180px, .85fr);
+  gap: 16px;
+  align-items: stretch;
+  background: radial-gradient(circle at 20% 0, #7bf7ff24, transparent 36%), radial-gradient(circle at 100% 0, #ffd46b2d, transparent 38%), linear-gradient(145deg, #071225, #161227 58%, #2a1b08);
+}
+.premiumShare.champion {
+  border-color: #ffd46b88;
+  box-shadow: 0 0 70px #ffd46b1a;
+}
+.shareCardHeader {
+  align-self: center;
+}
+.premiumShare .shareStats,
+.premiumShare p,
+.premiumShare .shareBadges {
+  grid-column: 1 / -1;
+}
+.sharePitchMini {
+  position: relative;
+  min-height: 190px;
+  border-radius: 22px;
+  border: 1px solid #ffffff24;
+  background: linear-gradient(90deg, #0a5b3a, #0d7d51 50%, #0a5b3a);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 2px #ffffff10;
+}
+.sharePitchMini:before,
+.sharePitchMini:after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+.sharePitchMini:before {
+  inset: 10px;
+  border: 1px solid #ffffff35;
+  border-radius: 16px;
+}
+.sharePitchMini:after {
+  left: 50%; top: 10px; bottom: 10px;
+  width: 1px;
+  background: #ffffff35;
+}
+.sharePitchMini i {
+  position: absolute;
+  translate: -50% -50%;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #061122;
+  border: 1px solid #7bf7ff99;
+  color: #7bf7ff;
+  box-shadow: 0 8px 20px #0008;
+  font-style: normal;
+}
+.sharePitchMini em {
+  font-size: 9px;
+  font-weight: 1000;
+  font-style: normal;
+}
+.shareBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shareBadges span {
+  border: 1px solid #ffffff20;
+  background: #ffffff0f;
+  color: #eef7ff;
+  border-radius: 999px;
+  padding: 8px 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+@media (max-width: 900px) {
+  .navActions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .heroBadges {
+    align-items: stretch;
+  }
+  .homeSoundToggle,
+  .mobilePromise {
+    width: fit-content;
+  }
+  .premiumShare {
+    grid-template-columns: 1fr;
+  }
+  .sharePitchMini {
+    min-height: 220px;
+  }
+}
+@media (max-width: 680px) {
+  body { overflow-x: hidden; }
+  .heroBadges,
+  .quickRestartBox,
+  .shareActions {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+  .homeSoundToggle,
+  .mobilePromise,
+  .soundToggle {
+    width: 100%;
+  }
+  .tacticalBrief {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+  .tacticalBrief strong {
+    font-size: 24px;
+  }
+  .weaknessList {
+    grid-template-columns: 1fr;
+  }
+  .premiumShare .shareStats {
+    grid-template-columns: repeat(2, minmax(0,1fr));
+  }
+  .sharePitchMini {
+    min-height: 180px;
+  }
+}
+@media (max-width: 520px) {
+  .choiceGrid {
+    grid-template-columns: 1fr;
+  }
+  .result .primary.fullBtn,
+  .result .secondary.fullBtn,
+  .skipCampaignBtn {
+    width: 100%;
+  }
+  .matchCentre,
+  .fmViewer,
+  .opponentReveal,
+  .weaknessPanel,
+  .tacticalBrief {
+    border-radius: 18px;
+  }
+}

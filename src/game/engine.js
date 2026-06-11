@@ -153,6 +153,15 @@ const POT_BASE = [
   ]}
 ];
 
+
+const BOSS_TEAMS = [
+  { name:'Real Madrid 2016/17', power:101, pot:1, bossAura:'Champions DNA' },
+  { name:'Barcelona 2014/15', power:100, pot:1, bossAura:'MSN nightmare' },
+  { name:'Bayern Munich 2019/20', power:99, pot:1, bossAura:'Pressing machine' },
+  { name:'Manchester City 2022/23', power:99, pot:1, bossAura:'Treble boss' },
+  { name:'Liverpool 2018/19', power:98, pot:1, bossAura:'Anfield intensity' }
+];
+
 const DIFFICULTY_CONFIG = {
   casual: { label:'Casual', powerShift:-5, koBonus:4, chaos:-1.5 },
   balanced: { label:'Balanced', powerShift:0, koBonus:0, chaos:0 },
@@ -290,12 +299,12 @@ function buildKnockoutMatches(score, leagueRank, difficulty='balanced'){
   for (const round of rounds) {
     if (!alive) break;
     const candidates = allPotTeams().filter(t=>t.power>=round.pool[0] && t.power<=round.pool[1]);
-    const opp = rand(candidates.length ? candidates : allPotTeams());
+    const opp = round.label === 'Final' ? rand(BOSS_TEAMS) : rand(candidates.length ? candidates : allPotTeams());
     const venue = round.label === 'Final' ? 'Neutral' : 'Two legs';
-    const adjustedPower = opp.power + cfg.powerShift;
+    const adjustedPower = opp.power + cfg.powerShift + (round.label === 'Final' ? 2 : 0);
     const win = Math.random() < knockoutChance(score, adjustedPower, (leagueRank<=8 ? 3 : 0) + cfg.koBonus) - (round.label==='Final'?.04:0);
     const r = matchResult(score, opp.power, round.label, venue, difficulty);
-    matches.push({ round:'Knockout', label:round.label, opponent:opp.name, venue, pot:opp.pot, opponentPower:adjustedPower, danger:dangerFromPower(adjustedPower), ...r, status:win?'Win':'Loss' });
+    matches.push({ round:'Knockout', label:round.label, opponent:opp.name, venue, pot:opp.pot, opponentPower:adjustedPower, danger:round.label === 'Final' ? 'Final Boss' : dangerFromPower(adjustedPower), boss:round.label === 'Final', bossAura:opp.bossAura, ...r, status:win?'Win':'Loss' });
     alive = win;
   }
   return matches;

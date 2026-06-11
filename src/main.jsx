@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Trophy, Shuffle, RotateCcw, Sparkles, ShieldCheck, Play, Dice5, Target, Zap, Medal, Goal, Handshake, Shield, Crown, Swords, Gauge, Timer, Star, Layers, Eye, EyeOff, Wand2, Users, CalendarRange, ChevronRight, Download, Copy, Smartphone } from 'lucide-react';
+import { Trophy, Shuffle, RotateCcw, Sparkles, ShieldCheck, Play, Dice5, Target, Zap, Medal, Goal, Handshake, Shield, Crown, Swords, Gauge, Timer, Star, Layers, Eye, EyeOff, Wand2, Users, CalendarRange, ChevronRight, Download, Copy, Smartphone, Volume2, VolumeX, AlertTriangle, RefreshCw } from 'lucide-react';
 import { formations } from './data/formations';
 import { seasons } from './data/seasons';
 import { players } from './data/players';
@@ -30,6 +30,15 @@ const DIFFICULTIES = [
   { id:'legendary', name:'Legendary', tag:'sweaty', desc:'Lawan naik power. Mode buat yang pengen mentalnya dites.', icon:Swords }
 ];
 
+
+const TACTICAL_STYLES = [
+  { id:'balanced', name:'Balanced', tag:'safe', desc:'No gimmick. Tim main normal, cocok buat squad campuran.', icon:Gauge },
+  { id:'gegenpress', name:'Gegenpress', tag:'high risk', desc:'Pressing brutal. Attack naik kalau stamina/defense lu kuat, tapi bisa bocor.', icon:Zap },
+  { id:'tikitaka', name:'Tiki-Taka', tag:'chem boost', desc:'Chemistry dan midfielder makin penting. Cocok buat squad satu DNA.', icon:Handshake },
+  { id:'counter', name:'Counter Attack', tag:'direct', desc:'Winger dan striker jadi senjata. Cocok buat tim cepat dan tajam.', icon:Target },
+  { id:'parkbus', name:'Park The Bus', tag:'defense', desc:'Defense lebih aman, tapi goal chance agak turun. Haram tapi efektif.', icon:Shield }
+];
+
 const yearBounds = players.reduce((acc,p)=>{
   const y = seasonStartYear(p.season); return [Math.min(acc[0],y), Math.max(acc[1],y)];
 }, [2099, 0]);
@@ -46,6 +55,103 @@ function getRarity(rating){
   if (rating >= 88) return 'elite';
   if (rating >= 84) return 'star';
   return 'core';
+}
+
+
+function getTacticalStyle(id){ return TACTICAL_STYLES.find(s=>s.id===id) || TACTICAL_STYLES[0]; }
+function getHigherDifficulty(id){
+  const order = ['casual','balanced','legendary'];
+  const next = order[Math.min(order.length-1, order.indexOf(id)+1)];
+  return next === id ? null : next;
+}
+function countRoles(slots=[]){
+  const filled = slots.filter(s=>s.player);
+  const exactMiss = filled.filter(s=>positionFit(s.player, s.position) < .88).length;
+  return {
+    filled: filled.length,
+    gk: filled.filter(s=>s.position==='GK').length,
+    def: filled.filter(s=>['CB','LB','RB','LWB','RWB'].includes(s.position)).length,
+    mid: filled.filter(s=>['CDM','CM','CAM','LM','RM'].includes(s.position)).length,
+    att: filled.filter(s=>['LW','RW','ST'].includes(s.position)).length,
+    wide: filled.filter(s=>['LW','RW','LM','RM','LB','RB','LWB','RWB'].includes(s.position)).length,
+    creators: filled.filter(s=>['CAM','CM','RW','LW','RM','LM'].includes(s.position)).length,
+    exactMiss
+  };
+}
+function tacticalImpact(slots=[], styleId='balanced', score=null){
+  const c = countRoles(slots);
+  const chem = score?.chemistry || 0;
+  let bonus = 0;
+  let label = 'Stable setup';
+  let note = 'No major tactical risk. This is the boring but sane option.';
+  if (styleId === 'gegenpress') {
+    bonus = (c.mid>=3 ? 2.4 : -1.2) + (c.att>=3 ? 1.2 : 0) - (c.def<4 ? 2.2 : 0) - (c.exactMiss*.5);
+    label = bonus >= 0 ? 'Pressing bonus active' : 'Pressing risk detected';
+    note = bonus >= 0 ? 'Midfield and attack can hunt the ball aggressively.' : 'Too open for high press. One ball over the top and mampus.';
+  } else if (styleId === 'tikitaka') {
+    bonus = (c.mid>=3 ? 2.1 : -1.5) + Math.min(2.6, chem*.22) - (c.exactMiss*.45);
+    label = bonus >= 0 ? 'Control boost active' : 'Possession looks forced';
+    note = bonus >= 0 ? 'Chemistry and midfield shape help the team recycle possession.' : 'Not enough midfield/chemistry buat sok tiki-taka.';
+  } else if (styleId === 'counter') {
+    bonus = (c.att>=2 ? 1.8 : -1.2) + (c.wide>=3 ? 1.5 : 0) + (c.def>=4 ? .9 : -1.1);
+    label = bonus >= 0 ? 'Counter punch ready' : 'Counter lacks weapons';
+    note = bonus >= 0 ? 'Wide players and forwards can punish space behind.' : 'Counter attack tanpa outlet itu cuma clearance panik.';
+  } else if (styleId === 'parkbus') {
+    bonus = (c.def>=4 ? 2.2 : -1.4) + (c.gk ? 1 : -2) - (c.att<2 ? 1.2 : 0);
+    label = bonus >= 0 ? 'Low block secured' : 'Bus has no wheels';
+    note = bonus >= 0 ? 'Defense gets safer, but don’t expect champagne football.' : 'Park the bus tanpa defense itu bukan taktik, itu pasrah.';
+  }
+  bonus = Math.round(bonus*10)/10;
+  return { bonus, label, note, adjustedScore: Math.round(((score?.total || 0)+bonus)*10)/10 };
+}
+function applyTacticalScore(total, styleId, slots, score){
+  return Math.max(64, Math.min(118, Math.round((Number(total || 0) + tacticalImpact(slots, styleId, score).bonus)*10)/10));
+}
+function buildSquadWeaknesses(slots=[], score=null, tacticalStyle='balanced'){
+  const c = countRoles(slots);
+  const issues = [];
+  if (!c.gk) issues.push({level:'danger', title:'No natural GK', desc:'Tim lu literally belum punya kiper. Ini bukan street football coy.'});
+  if (c.def < 3) issues.push({level:'danger', title:'Defense exposed', desc:'Bek kurang. Lawan elite bakal masuk kayak tamu kondangan.'});
+  else if (c.def < 4) issues.push({level:'warn', title:'Backline thin', desc:'Defense masih tipis, apalagi kalau lawan winger cepat.'});
+  if (c.mid < 2) issues.push({level:'warn', title:'Midfield kosong', desc:'Build-up dan duel tengah rawan kalah.'});
+  if (c.att < 2) issues.push({level:'warn', title:'Attack kurang galak', desc:'Butuh minimal dua ancaman biar nggak gampang dimatiin.'});
+  if (c.exactMiss >= 3) issues.push({level:'danger', title:'Too many off-position picks', desc:'Rating gede percuma kalau dipaksa main posisi ngaco.'});
+  else if (c.exactMiss) issues.push({level:'info', title:'Position compromise', desc:`${c.exactMiss} pemain kurang natural di slot-nya.`});
+  if ((score?.chemistry || 0) < 3 && c.filled >= 7) issues.push({level:'info', title:'Chemistry low', desc:'Banyak bintang, tapi belum tentu nyambung.'});
+  if (tacticalStyle === 'gegenpress' && c.def < 4) issues.push({level:'danger', title:'Gegenpress trap', desc:'High press tanpa backline kuat bisa kena counter goblok.'});
+  if (tacticalStyle === 'tikitaka' && c.mid < 3) issues.push({level:'warn', title:'Tiki-taka butuh midfielder', desc:'Kurang gelandang buat pegang tempo.'});
+  if (tacticalStyle === 'counter' && c.wide < 3) issues.push({level:'warn', title:'Counter kurang lebar', desc:'Butuh sisi lapangan buat transisi cepat.'});
+  if (tacticalStyle === 'parkbus' && c.att < 2) issues.push({level:'info', title:'Low block risk', desc:'Bisa solid, tapi outlet serangan minim.'});
+  if (!issues.length && c.filled === 11) issues.push({level:'good', title:'No major weakness', desc:'Squad keliatan cukup waras. Sekarang tinggal bola itu bulat.'});
+  return issues.slice(0,4);
+}
+let sfxCtx;
+function playSfx(type='click', enabled=true){
+  if (!enabled || typeof window === 'undefined') return;
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    sfxCtx = sfxCtx || new AudioContext();
+    if (sfxCtx.state === 'suspended') sfxCtx.resume?.();
+    const now = sfxCtx.currentTime;
+    const gain = sfxCtx.createGain();
+    gain.connect(sfxCtx.destination);
+    gain.gain.setValueAtTime(0.0001, now);
+    const patterns = {
+      click:[420], spin:[260,330,420], reveal:[520,740], goal:[392,523,659,784], concede:[180,130], trophy:[523,659,784,1046], whistle:[880,660]
+    };
+    const notes = patterns[type] || patterns.click;
+    notes.forEach((freq,i)=>{
+      const osc = sfxCtx.createOscillator();
+      osc.type = type === 'concede' ? 'sawtooth' : 'sine';
+      osc.frequency.setValueAtTime(freq, now + i*.07);
+      osc.connect(gain);
+      osc.start(now + i*.07);
+      osc.stop(now + i*.07 + .08);
+    });
+    gain.gain.exponentialRampToValueAtTime(type==='goal' || type==='trophy' ? .075 : .045, now+.02);
+    gain.gain.exponentialRampToValueAtTime(.0001, now + Math.max(.18, notes.length*.08+.1));
+  } catch {}
 }
 
 function drawRoundedRect(ctx, x, y, w, h, r){
@@ -117,6 +223,8 @@ function App(){
   const [mode,setMode]=useState('classic');
   const [draftMode,setDraftMode]=useState('balanced');
   const [difficulty,setDifficulty]=useState('balanced');
+  const [tacticalStyle,setTacticalStyle]=useState('balanced');
+  const [soundEnabled,setSoundEnabled]=useState(true);
   const [era,setEra]=useState(yearBounds);
   const [slots,setSlots]=useState(()=>makeSlots('4-3-3'));
   const [selectedSlotId,setSelectedSlotId]=useState(null);
@@ -157,13 +265,27 @@ function App(){
     return ()=>clearTimeout(id);
   }, [phase, visibleMatches, matches]);
 
+
+  useEffect(()=>{
+    if (phase !== 'simulating' || visibleMatches <= 0) return;
+    const last = matches[visibleMatches-1];
+    if (!last) return;
+    playSfx(last.status === 'Win' ? 'goal' : last.status === 'Loss' ? 'concede' : 'whistle', soundEnabled);
+  }, [visibleMatches, phase, matches, soundEnabled]);
+
+  useEffect(()=>{
+    if (phase === 'result') playSfx(finalOutcome?.exit === 'Champion' ? 'trophy' : 'whistle', soundEnabled);
+  }, [phase, finalOutcome?.exit, soundEnabled]);
+
   function start(){
+    playSfx('click', soundEnabled);
     const fresh = makeSlots(formation);
     setSlots(fresh); setSelectedSlotId(fresh.find(s=>!s.player)?.id); setStarted(true);
     setSpinMeta(null); setOptions([]); setPhase('draft'); setGroup([]); setMatches([]); setVisibleMatches(0); setVisibleDraw(0); setRespinsUsed(0); setIsSpinning(false); setRecentPickSlotId(null);
   }
 
   function reset(){
+    playSfx('click', soundEnabled);
     setStarted(false); setPhase('draft'); setSpinMeta(null); setOptions([]); setGroup([]); setMatches([]); setVisibleMatches(0); setVisibleDraw(0); setRespinsUsed(0); setIsSpinning(false); setRecentPickSlotId(null);
     setSlots(makeSlots(formation)); setSelectedSlotId(null);
   }
@@ -173,6 +295,7 @@ function App(){
     const isRespin = options.length > 0;
     const limit = RESPIN_LIMITS[mode] ?? 1;
     if (isRespin && respinsUsed >= limit) return;
+    playSfx('spin', soundEnabled);
     setIsSpinning(true);
     setSpinMeta(null);
     setOptions([]);
@@ -191,6 +314,7 @@ function App(){
     const slot = slots.find(s=>s.id===slotId);
     if (!slot || slot.player || draftedIds.includes(player.id)) return;
     const updated = slots.map(s=> s.id===slotId ? {...s, player, assignedPosition:s.position} : s);
+    playSfx('reveal', soundEnabled);
     setSlots(updated); setOptions([]); setSpinMeta(null); setRecentPickSlotId(slotId);
     setTimeout(()=>setRecentPickSlotId(null), 900);
     const next = updated.find(s=>!s.player);
@@ -202,22 +326,35 @@ function App(){
   }
 
   function startCampaign(){
-    const built = buildMatches(score.total, group.length?group:drawGroup(score.total), difficulty);
+    playSfx('whistle', soundEnabled);
+    const tacticalScore = applyTacticalScore(score.total, tacticalStyle, slots, score);
+    const built = buildMatches(tacticalScore, group.length?group:drawGroup(tacticalScore), difficulty).map(m => m.label === 'Final' ? {...m, boss:true, danger:'Final Boss', bossAura:m.bossAura || 'Champions DNA'} : m);
     setMatches(built); setVisibleMatches(0); setVisibleDraw(0); setPhase('draw');
   }
 
   function skipCampaign(){
     if (!matches.length) return;
+    playSfx('click', soundEnabled);
     setVisibleMatches(matches.length);
     setPhase('result');
   }
 
-  if(!started) return <Home formation={formation} setFormation={setFormation} mode={mode} setMode={setMode} draftMode={draftMode} setDraftMode={setDraftMode} difficulty={difficulty} setDifficulty={setDifficulty} era={era} setEra={setEra} start={start}/>;
+
+
+  function playAgain(nextDifficulty=null){
+    playSfx('click', soundEnabled);
+    if (nextDifficulty) setDifficulty(nextDifficulty);
+    const fresh = makeSlots(formation);
+    setSlots(fresh); setSelectedSlotId(fresh.find(s=>!s.player)?.id); setStarted(true);
+    setSpinMeta(null); setOptions([]); setPhase('draft'); setGroup([]); setMatches([]); setVisibleMatches(0); setVisibleDraw(0); setRespinsUsed(0); setIsSpinning(false); setRecentPickSlotId(null);
+  }
+
+  if(!started) return <Home formation={formation} setFormation={setFormation} mode={mode} setMode={setMode} draftMode={draftMode} setDraftMode={setDraftMode} difficulty={difficulty} setDifficulty={setDifficulty} tacticalStyle={tacticalStyle} setTacticalStyle={setTacticalStyle} soundEnabled={soundEnabled} setSoundEnabled={setSoundEnabled} era={era} setEra={setEra} start={start}/>;
 
   return <main className="app shellBg">
     <nav className="nav glassNav">
       <div className="brandMark"><span>ECD</span><div><b>European Champions Draft</b><small>36-team league phase · fan-made</small></div></div>
-      <div className="navActions"><span>{MODES.find(m=>m.id===mode)?.name} · {DRAFT_MODES.find(d=>d.id===draftMode)?.name} · {DIFFICULTIES.find(d=>d.id===difficulty)?.name}</span><button onClick={reset}><RotateCcw size={16}/> Reset</button></div>
+      <div className="navActions"><span>{MODES.find(m=>m.id===mode)?.name} · {getTacticalStyle(tacticalStyle).name} · {DIFFICULTIES.find(d=>d.id===difficulty)?.name}</span><button className="soundToggle" onClick={()=>setSoundEnabled(v=>!v)}>{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>} SFX</button><button onClick={reset}><RotateCcw size={16}/> Reset</button></div>
     </nav>
 
     <section className="gameGrid pageEnter">
@@ -232,17 +369,18 @@ function App(){
 
       <div className="panel draftPanel commandPanel">
         <ScoreCard score={score} filledCount={draftedIds.length} totalSlots={slots.length}/>
+        <SquadWeaknessPanel slots={slots} score={score} tacticalStyle={tacticalStyle} compact={phase==='draft'}/>
         {phase === 'draft' && <DraftPanel mode={mode} selectedSlot={selectedSlot} spin={spin} spinMeta={spinMeta} options={options} slots={slots} assignPlayer={assignPlayer} draftedIds={draftedIds} respinsUsed={respinsUsed} respinLimit={RESPIN_LIMITS[mode] ?? 1} isSpinning={isSpinning}/>}        
-        {phase === 'preseason' && <PreSeason score={score} group={group} startCampaign={startCampaign} slots={slots} difficulty={difficulty}/>}        
+        {phase === 'preseason' && <PreSeason score={score} group={group} startCampaign={startCampaign} slots={slots} difficulty={difficulty} tacticalStyle={tacticalStyle}/>}        
         {phase === 'draw' && <LeagueDrawPresentation matches={matches} visibleDraw={visibleDraw}/>}        
-        {phase === 'simulating' && <Simulation matches={matches} visibleMatches={visibleMatches} outcome={outcome} slots={slots} onSkip={skipCampaign} difficulty={difficulty}/>}        
-        {phase === 'result' && <Result matches={matches} outcome={finalOutcome} score={score} slots={slots} difficulty={difficulty}/>}        
+        {phase === 'simulating' && <Simulation matches={matches} visibleMatches={visibleMatches} outcome={outcome} slots={slots} onSkip={skipCampaign} difficulty={difficulty} tacticalStyle={tacticalStyle}/>}        
+        {phase === 'result' && <Result matches={matches} outcome={finalOutcome} score={score} slots={slots} difficulty={difficulty} tacticalStyle={tacticalStyle} onPlayAgain={()=>playAgain()} onTryHigher={()=>playAgain(getHigherDifficulty(difficulty))} nextDifficulty={getHigherDifficulty(difficulty)}/>}        
       </div>
     </section>
   </main>
 }
 
-function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,difficulty,setDifficulty,era,setEra,start}){
+function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,difficulty,setDifficulty,tacticalStyle,setTacticalStyle,soundEnabled,setSoundEnabled,era,setEra,start}){
  const availableStats = useMemo(()=>{
   const seasonIds = new Set(players.filter(p=>{ const y=seasonStartYear(p.season); return y>=era[0] && y<=era[1]; }).map(p=>p.seasonId));
   return { playerCount: players.filter(p=>{ const y=seasonStartYear(p.season); return y>=era[0] && y<=era[1]; }).length, seasonCount: seasonIds.size };
@@ -256,7 +394,7 @@ function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,diffic
       <div className="heroStats">
         <span><b>36</b> team table</span><span><b>8</b> matchdays</span><span><b>{seasons.length}</b> club-seasons</span><span><b>{players.length}</b> player cards</span>
       </div>
-      <div className="mobilePromise"><Smartphone size={16}/> Mobile layout polished for one-hand draft flow.</div>
+      <div className="heroBadges"><div className="mobilePromise"><Smartphone size={16}/> Mobile layout polished for one-hand draft flow.</div><button className="homeSoundToggle" onClick={()=>setSoundEnabled(v=>!v)}>{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>} Sound FX {soundEnabled ? 'On' : 'Off'}</button></div>
     </div>
     <div className="floatingDeck" aria-hidden="true">
       <div className="mockCard mythic"><small>UCL Legend</small><b>98</b><span>LW / ST</span></div>
@@ -270,6 +408,7 @@ function Home({formation,setFormation,mode,setMode,draftMode,setDraftMode,diffic
     <ChoiceGrid title="Game Mode" items={MODES} selected={mode} onSelect={setMode} footer={`Re-spin limit: ${RESPIN_LIMITS[mode] ?? 1}`}/>
     <ChoiceGrid title="Draft Mode" items={DRAFT_MODES} selected={draftMode} onSelect={setDraftMode}/>
     <ChoiceGrid title="Difficulty" items={DIFFICULTIES} selected={difficulty} onSelect={setDifficulty}/>
+    <ChoiceGrid title="Tactical Style" items={TACTICAL_STYLES} selected={tacticalStyle} onSelect={setTacticalStyle} footer={getTacticalStyle(tacticalStyle).tag}/>
     <FormationPicker formation={formation} setFormation={setFormation}/>
     <EraSlider era={era} setEra={setEra} stats={availableStats}/>
     <button className="primary big startBtn" onClick={start}><Trophy/> Start Draft <ChevronRight size={18}/></button>
@@ -424,6 +563,32 @@ function PlayerCard({player, mode, selectedSlot, slots, assignPlayer, index=0}){
 }
 
 
+
+function SquadWeaknessPanel({slots,score,tacticalStyle,compact=false}){
+  const filled = slots.filter(s=>s.player).length;
+  if (!filled) return null;
+  const issues = buildSquadWeaknesses(slots, score, tacticalStyle);
+  const style = getTacticalStyle(tacticalStyle);
+  const impact = tacticalImpact(slots, tacticalStyle, score);
+  return <section className={`weaknessPanel ${compact?'compact':''}`}>
+    <div className="weaknessHead"><AlertTriangle size={17}/><div><b>Squad weakness warning</b><small>{style.name} · {impact.label} ({impact.bonus>=0?'+':''}{impact.bonus})</small></div></div>
+    <div className="weaknessList">
+      {issues.map((i,idx)=><article key={`${i.title}-${idx}`} className={`weaknessItem ${i.level}`}><b>{i.title}</b><span>{i.desc}</span></article>)}
+    </div>
+  </section>
+}
+
+function TacticalBrief({slots,score,tacticalStyle}){
+  const style = getTacticalStyle(tacticalStyle);
+  const impact = tacticalImpact(slots, tacticalStyle, score);
+  const Icon = style.icon || Gauge;
+  return <section className="tacticalBrief">
+    <div className="tacticalIcon"><Icon size={22}/></div>
+    <div><span className="eyebrow">Tactical setup</span><h3>{style.name}</h3><p>{impact.note}</p></div>
+    <strong>{impact.bonus>=0?'+':''}{impact.bonus}</strong>
+  </section>
+}
+
 function LeagueDrawPresentation({matches,visibleDraw}){
   const league = matches.filter(m=>m.round === 'League Phase');
   const visible = league.slice(0, visibleDraw);
@@ -497,9 +662,9 @@ function OpponentReveal({match,difficulty}){
   if(!match) return null;
   const threat = Math.round(match.opponentPower || 85);
   const diff = DIFFICULTIES.find(d=>d.id===difficulty)?.name || 'Balanced';
-  const styles = match.label === 'Final' ? 'Final night' : match.venue === 'Away' ? 'Hostile away crowd' : match.venue === 'Home' ? 'Home advantage' : 'Two-leg pressure';
-  return <section className={`opponentReveal ${match.label==='Final'?'finalReveal':''}`}>
-    <div className="opponentBadge"><Swords size={26}/><span>{teamAbbr(match.opponent)}</span></div>
+  const styles = match.boss ? `Final Boss · ${match.bossAura || 'Champions DNA'}` : match.label === 'Final' ? 'Final night' : match.venue === 'Away' ? 'Hostile away crowd' : match.venue === 'Home' ? 'Home advantage' : 'Two-leg pressure';
+  return <section className={`opponentReveal ${match.label==='Final'?'finalReveal':''} ${match.boss?'bossReveal':''}`}>
+    <div className="opponentBadge">{match.boss ? <Crown size={26}/> : <Swords size={26}/>}<span>{teamAbbr(match.opponent)}</span></div>
     <div className="opponentCopy"><span className="eyebrow">Opponent reveal</span><h2>Your XI vs {match.opponent}</h2><p>{match.label} · {styles} · Difficulty: {diff}</p></div>
     <div className="threatMeter"><span>Threat Level</span><b>{threat}</b><i><em style={{width:`${Math.min(100,threat)}%`}}/></i><small>{match.danger || 'European threat'}</small></div>
   </section>
@@ -543,15 +708,18 @@ function KnockoutBracket({matches,visibleMatches}){
   </section>
 }
 
-function ShareCard({summary,outcome,score,statPack}){
-  return <section className="shareCard">
-    <div><span>EUROPEAN CHAMPIONS DRAFT</span><b>{outcome.exit}</b><small>Projected {ordinal(summary.projectedRank)} · Finished {ordinal(summary.finishedRank)}</small></div>
+function ShareCard({summary,outcome,score,statPack,slots,difficulty,tacticalStyle,achievements=[]}){
+  const xi = slots.filter(s=>s.player).slice(0,11);
+  return <section className={`shareCard premiumShare ${outcome.exit==='Champion'?'champion':''}`}>
+    <div className="shareCardHeader"><span>EUROPEAN CHAMPIONS DRAFT</span><b>{outcome.exit}</b><small>{DIFFICULTIES.find(d=>d.id===difficulty)?.name} · {getTacticalStyle(tacticalStyle).name} · Finished {ordinal(summary.finishedRank)}</small></div>
+    <div className="sharePitchMini">{xi.map((s)=><i key={s.id} style={{left:`${s.x}%`, top:`${s.y}%`}}><em>{s.position}</em></i>)}</div>
     <div className="shareStats"><span>{summary.wins}W</span><span>{summary.draws}D</span><span>{summary.losses}L</span><span>{summary.gf}:{summary.ga}</span><span>{score.total}</span></div>
+    <div className="shareBadges"><span>MOTM: {statPack.awards.playerOfSeason.name}</span><span>{achievements[0]?.title || 'Campaign Logged'}</span></div>
     <p>Top scorer: <b>{statPack.awards.goldenBoot.name}</b> · POTS: <b>{statPack.awards.playerOfSeason.name}</b></p>
   </section>
 }
 
-function PreSeason({score,group,startCampaign,slots,difficulty}){
+function PreSeason({score,group,startCampaign,slots,difficulty,tacticalStyle}){
   const odds = score.odds;
   return <div className="preseason pageEnter">
     <div className="trophy">🏆</div><h2>Squad Complete</h2><p className="muted">Ini proyeksi sebelum match generate. Abis ini baru league phase jalan satu-satu.</p>
@@ -560,7 +728,9 @@ function PreSeason({score,group,startCampaign,slots,difficulty}){
       <div className="project"><div><span>PROJECTED FINISH</span><b>{score.projected.finish}</b></div><div><span>EXPECTED POINTS</span><b>{score.projected.expectedPoints}</b></div></div>
       <OddsBar label="Win Europe" value={odds.win}/><OddsBar label="Reach Final" value={odds.final}/><OddsBar label="Reach Semi" value={odds.semi}/><OddsBar label="Qualify Knockout" value={odds.knockout}/><OddsBar label="Disaster Chance" value={odds.disaster}/>
     </section>
-    <section className="miniXIbox"><span className="sectionLabel">Your XI Preview · {DIFFICULTIES.find(d=>d.id===difficulty)?.name} difficulty</span>{slots.map(s=><span key={s.id}><b>{s.position}</b>{s.player?.name}</span>)}</section>
+    <TacticalBrief slots={slots} score={score} tacticalStyle={tacticalStyle}/>
+    <SquadWeaknessPanel slots={slots} score={score} tacticalStyle={tacticalStyle}/>
+    <section className="miniXIbox"><span className="sectionLabel">Your XI Preview · {DIFFICULTIES.find(d=>d.id===difficulty)?.name} difficulty · {getTacticalStyle(tacticalStyle).name}</span>{slots.map(s=><span key={s.id}><b>{s.position}</b>{s.player?.name}</span>)}</section>
     <CampaignRoad matches={[]} visibleMatches={0} compact/>
     <section className="groupBox"><h3>League Phase Draw</h3><p className="muted">8 lawan: 2 dari tiap pot, 4 home + 4 away.</p><div className="groupTeam you"><b>You</b><span>Your Draft XI</span><em>Custom Squad</em></div>{group.map((g,i)=><div key={`${g.name}-${g.label}`} className="groupTeam" style={{animationDelay:`${i*70}ms`}}><b>{g.label} · Pot {g.pot}</b><span>{g.name}</span><em>{g.venue} · {g.danger}</em></div>)}</section>
     <button className="primary fullBtn" onClick={startCampaign}><Play/> Start Campaign</button>
@@ -710,7 +880,7 @@ function MatchVisualizer({match, slots, index}){
   </section>
 }
 
-function Simulation({matches,visibleMatches,outcome,slots,onSkip,difficulty}){
+function Simulation({matches,visibleMatches,outcome,slots,onSkip,difficulty,tacticalStyle}){
   const current = matches[visibleMatches];
   const last = matches[Math.max(0, visibleMatches-1)];
   const leagueDone = visibleMatches >= matches.filter(m=>m.round === 'League Phase').length;
@@ -726,7 +896,7 @@ function Simulation({matches,visibleMatches,outcome,slots,onSkip,difficulty}){
     {current && <div className={`liveCard matchCentre ${finalActive?'grandFinal':''}`}>
       <span>{current.label === 'Final' ? 'European Final' : current.label}</span>
       <b>Your XI vs {current.opponent}</b>
-      <small>{current.venue} · FM-style highlight simulation</small>
+      <small>{current.venue} · {getTacticalStyle(tacticalStyle).name} · FM-style highlight</small>
       <div className="scoreboard"><strong>Your XI</strong><em>{current.gf ?? 0} - {current.ga ?? 0}</em><strong>{current.opponent}</strong></div>
       <MatchVisualizer match={current} slots={slots} index={visibleMatches}/>
       <LiveEvents match={current}/>
@@ -740,12 +910,12 @@ function Simulation({matches,visibleMatches,outcome,slots,onSkip,difficulty}){
   </div>
 }
 
-function Result({matches,outcome,score,slots,difficulty}){
+function Result({matches,outcome,score,slots,difficulty,tacticalStyle,onPlayAgain,onTryHigher,nextDifficulty}){
  const summary = summarizeSeason(matches, outcome, score);
  const statPack = generatePlayerStats(slots, matches);
  const xi = slots.map(s=>({position:s.position, ...s.player}));
  const achievements = buildAchievements({summary,outcome,score,slots,matches,statPack,difficulty});
- const share = `European Champions Draft — ${outcome.exit} | Difficulty ${DIFFICULTIES.find(d=>d.id===difficulty)?.name} | League Rank ${outcome.leagueRank} | ${summary.wins}W ${summary.draws}D ${summary.losses}L | ${summary.gf} GF ${summary.ga} GA | Score ${score.total} | Achievement: ${achievements[0]?.title}`;
+ const share = `European Champions Draft — ${outcome.exit} | Difficulty ${DIFFICULTIES.find(d=>d.id===difficulty)?.name} | Tactical ${getTacticalStyle(tacticalStyle).name} | League Rank ${outcome.leagueRank} | ${summary.wins}W ${summary.draws}D ${summary.losses}L | ${summary.gf} GF ${summary.ga} GA | Score ${score.total} | Achievement: ${achievements[0]?.title}`;
  return <div className={`result seasonReview pageEnter ${outcome.exit==='Champion'?'championResult':''}`}>
   <section className="campaignHero"><div><span>{outcome.exit==='Champion'?'CHAMPIONS':'CAMPAIGN COMPLETE'}</span><h2>{outcome.exit}</h2><p>{summary.line}</p></div><Crown size={54}/></section>
   <div className="resultTop">
@@ -755,11 +925,15 @@ function Result({matches,outcome,score,slots,difficulty}){
   </div>
   <section className="numbersBox"><h2>Making up the numbers</h2><p>{summary.line}</p><small>{summary.note}</small></section>
   <CampaignRoad matches={matches} visibleMatches={matches.length} compact/>
-  <ShareCard summary={summary} outcome={outcome} score={score} statPack={statPack}/>
+  <ShareCard summary={summary} outcome={outcome} score={score} statPack={statPack} slots={slots} difficulty={difficulty} tacticalStyle={tacticalStyle} achievements={achievements}/>
   <AchievementGrid achievements={achievements}/>
   <div className="shareActions">
     <button className="primary fullBtn" onClick={()=>downloadSharePng({summary,outcome,score,statPack,xi})}><Download size={18}/> Download share PNG</button>
     <button className="secondary fullBtn" onClick={()=>navigator.clipboard?.writeText(share)}><Copy size={18}/> Copy share text</button>
+  </div>
+  <div className="quickRestartBox">
+    <button className="primary fullBtn" onClick={onPlayAgain}><RefreshCw size={18}/> Play again</button>
+    {nextDifficulty && <button className="secondary fullBtn" onClick={onTryHigher}><Swords size={18}/> Try {DIFFICULTIES.find(d=>d.id===nextDifficulty)?.name}</button>}
   </div>
   <section className="yourXIBox"><span className="sectionLabel">YOUR XI</span>{xi.map(p=><div className="xiRow" key={p.id}><em className={`posTag pos-${p.position}`}>{p.position}</em><b>{p.name}</b><span>{p.club.slice(0,3).toUpperCase()} {p.season.slice(0,4)}</span><strong>{p.rating}</strong></div>)}</section>
   <section className="statGrid"><StatBox value={summary.wins} label="Wins" good/><StatBox value={summary.draws} label="Draws" warn/><StatBox value={summary.losses} label="Losses" bad/><StatBox value={outcome.leaguePoints ?? outcome.points} label="League Points"/><StatBox value={summary.gf} label="Goals For" good/><StatBox value={summary.ga} label="Goals Against" bad/></section>
